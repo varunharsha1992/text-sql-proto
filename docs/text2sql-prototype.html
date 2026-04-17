@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DataLens — AI Data Analysis</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&family=Fraunces:ital,wght@0,300;0,600;1,300&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0e0f11;
+  --bg2: #141518;
+  --bg3: #1a1c20;
+  --bg4: #22242a;
+  --border: rgba(255,255,255,0.07);
+  --border2: rgba(255,255,255,0.12);
+  --text: #e8eaf0;
+  --text2: #8b90a0;
+  --text3: #555a6a;
+  --accent: #6ee7b7;
+  --accent2: #818cf8;
+  --accent3: #fbbf24;
+  --danger: #f87171;
+  --blue: #60a5fa;
+  --font: 'DM Sans', sans-serif;
+  --mono: 'DM Mono', monospace;
+  --display: 'Fraunces', serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); font-size: 13px; line-height: 1.5; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+
+/* NAV */
+.nav { height: 44px; background: var(--bg2); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 20px; gap: 0; flex-shrink: 0; }
+.nav-brand { font-family: var(--display); font-size: 16px; font-weight: 600; color: var(--accent); margin-right: 32px; letter-spacing: -0.02em; }
+.nav-steps { display: flex; align-items: stretch; gap: 0; flex: 1; }
+.nav-step { display: flex; align-items: center; gap: 7px; padding: 0 16px; font-size: 12px; color: var(--text3); cursor: pointer; border-bottom: 2px solid transparent; transition: all .15s; white-space: nowrap; position: relative; }
+.nav-step:hover:not(.locked) { color: var(--text2); }
+.nav-step.active { color: var(--text); border-bottom-color: var(--accent); }
+.nav-step.done { color: var(--text2); }
+.nav-step.locked { opacity: 0.3; cursor: not-allowed; }
+.step-num { width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9px; font-family: var(--mono); border: 1px solid var(--border2); color: var(--text3); flex-shrink: 0; }
+.nav-step.active .step-num { background: var(--accent); color: #000; border-color: var(--accent); }
+.nav-step.done .step-num { background: rgba(110,231,183,0.15); color: var(--accent); border-color: rgba(110,231,183,0.3); }
+.nav-step.done .step-num::after { content: '✓'; }
+.nav-step.done .step-num span { display: none; }
+.nav-arrow { color: var(--text3); font-size: 10px; padding: 0 2px; }
+
+/* SCREENS */
+.screen { display: none; flex: 1; overflow: hidden; }
+.screen.active { display: flex; }
+
+/* SPLIT LAYOUTS */
+.split-2 { display: grid; flex: 1; overflow: hidden; }
+.panel { overflow-y: auto; display: flex; flex-direction: column; }
+.panel-left { border-right: 1px solid var(--border); background: var(--bg2); }
+.panel-right { background: var(--bg); }
+
+/* SHARED */
+.panel-header { padding: 16px 20px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.panel-header h3 { font-size: 11px; font-weight: 500; color: var(--text3); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 2px; }
+.panel-header p { font-size: 12px; color: var(--text2); }
+.panel-body { padding: 16px 20px; flex: 1; }
+
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 6px; font-size: 12px; font-family: var(--font); cursor: pointer; transition: all .15s; border: 1px solid var(--border2); background: transparent; color: var(--text2); }
+.btn:hover { background: var(--bg4); color: var(--text); }
+.btn.primary { background: var(--accent); color: #000; border-color: var(--accent); font-weight: 500; }
+.btn.primary:hover { background: #5cd4a5; }
+.btn.sm { padding: 4px 10px; font-size: 11px; }
+
+.badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 100px; font-size: 10px; font-family: var(--mono); font-weight: 500; }
+.badge.green { background: rgba(110,231,183,0.12); color: var(--accent); border: 1px solid rgba(110,231,183,0.2); }
+.badge.blue { background: rgba(96,165,250,0.12); color: var(--blue); border: 1px solid rgba(96,165,250,0.2); }
+.badge.amber { background: rgba(251,191,36,0.12); color: var(--accent3); border: 1px solid rgba(251,191,36,0.2); }
+.badge.red { background: rgba(248,113,113,0.12); color: var(--danger); border: 1px solid rgba(248,113,113,0.2); }
+.badge.purple { background: rgba(129,140,248,0.12); color: var(--accent2); border: 1px solid rgba(129,140,248,0.2); }
+.badge.gray { background: rgba(255,255,255,0.05); color: var(--text3); border: 1px solid var(--border); }
+
+.card { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+
+/* ── SCREEN 1: UPLOAD + AUTO EDA ── */
+#s1 .split-2 { grid-template-columns: 360px 1fr; }
+
+.upload-zone { border: 1.5px dashed var(--border2); border-radius: 10px; padding: 32px 20px; text-align: center; cursor: pointer; transition: all .2s; margin-bottom: 16px; }
+.upload-zone:hover, .upload-zone.dragging { border-color: var(--accent); background: rgba(110,231,183,0.04); }
+.upload-icon { font-size: 28px; margin-bottom: 10px; }
+.upload-zone h4 { font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+.upload-zone p { font-size: 11px; color: var(--text3); }
+
+.file-info { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; }
+.file-info .file-name { font-family: var(--mono); font-size: 11px; color: var(--accent); margin-bottom: 6px; }
+.file-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.file-meta-item { font-size: 11px; }
+.file-meta-item .label { color: var(--text3); margin-bottom: 1px; }
+.file-meta-item .val { font-family: var(--mono); color: var(--text); font-weight: 500; }
+
+.quality-row { display: flex; align-items: center; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+.quality-row:last-child { border-bottom: none; }
+.quality-bar { height: 3px; background: var(--bg4); border-radius: 2px; flex: 1; margin: 0 10px; overflow: hidden; }
+.quality-bar-fill { height: 100%; border-radius: 2px; }
+
+.canvas-header { padding: 14px 20px 10px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.canvas-header h3 { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.1em; font-weight: 500; }
+
+.stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+.stat-card { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+.stat-card .s-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+.stat-card .s-val { font-family: var(--mono); font-size: 20px; font-weight: 500; line-height: 1; }
+.stat-card .s-sub { font-size: 10px; color: var(--text3); margin-top: 3px; }
+
+.charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+.chart-card { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+.chart-card h4 { font-size: 11px; color: var(--text2); margin-bottom: 12px; font-weight: 500; }
+
+/* Simple SVG charts */
+.bar-chart { display: flex; align-items: flex-end; gap: 5px; height: 80px; }
+.bar { border-radius: 3px 3px 0 0; flex: 1; transition: opacity .2s; cursor: pointer; }
+.bar:hover { opacity: 0.8; }
+.bar-labels { display: flex; gap: 5px; margin-top: 5px; }
+.bar-label { flex: 1; text-align: center; font-size: 9px; color: var(--text3); font-family: var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.hist-bars { display: flex; align-items: flex-end; gap: 2px; height: 80px; }
+.hist-bar { flex: 1; border-radius: 2px 2px 0 0; background: rgba(96,165,250,0.5); }
+
+.warning-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.warning-item { display: flex; align-items: flex-start; gap: 8px; padding: 8px 12px; background: rgba(251,191,36,0.06); border: 1px solid rgba(251,191,36,0.15); border-radius: 6px; font-size: 11px; }
+.warning-item .wi-icon { color: var(--accent3); flex-shrink: 0; font-size: 12px; margin-top: 1px; }
+.warning-item .wi-text { color: var(--text2); line-height: 1.5; }
+.warning-item .wi-col { font-family: var(--mono); color: var(--accent3); }
+
+/* ── SCREEN 2: CONTEXT AGENT ── */
+#s2 .split-2 { grid-template-columns: 380px 1fr; }
+
+.chat-messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.msg { display: flex; gap: 8px; max-width: 100%; }
+.msg.agent { flex-direction: row; }
+.msg.user { flex-direction: row-reverse; }
+.msg-avatar { width: 26px; height: 26px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 500; flex-shrink: 0; }
+.agent .msg-avatar { background: rgba(110,231,183,0.15); color: var(--accent); border: 1px solid rgba(110,231,183,0.2); }
+.user .msg-avatar { background: rgba(129,140,248,0.15); color: var(--accent2); border: 1px solid rgba(129,140,248,0.2); }
+.msg-bubble { padding: 9px 12px; border-radius: 8px; font-size: 12px; line-height: 1.6; max-width: calc(100% - 38px); }
+.agent .msg-bubble { background: var(--bg3); border: 1px solid var(--border); color: var(--text); border-top-left-radius: 2px; }
+.user .msg-bubble { background: rgba(129,140,248,0.12); border: 1px solid rgba(129,140,248,0.2); color: var(--text); border-top-right-radius: 2px; }
+.msg-time { font-size: 9px; color: var(--text3); margin-top: 4px; font-family: var(--mono); }
+.agent .msg-time { text-align: left; margin-left: 34px; }
+.user .msg-time { text-align: right; margin-right: 34px; }
+.typing-indicator { display: flex; gap: 4px; align-items: center; padding: 10px 12px; background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; border-top-left-radius: 2px; width: fit-content; }
+.typing-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--text3); animation: typingBounce 1.4s infinite; }
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes typingBounce { 0%, 60%, 100% { transform: translateY(0); opacity: 0.5; } 30% { transform: translateY(-4px); opacity: 1; } }
+
+.chat-input-area { padding: 12px 16px; border-top: 1px solid var(--border); flex-shrink: 0; display: flex; gap: 8px; align-items: flex-end; }
+.chat-input { flex: 1; background: var(--bg3); border: 1px solid var(--border2); border-radius: 8px; padding: 8px 12px; color: var(--text); font-family: var(--font); font-size: 12px; resize: none; outline: none; }
+.chat-input:focus { border-color: rgba(110,231,183,0.4); }
+
+.catalog-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.catalog-toolbar { padding: 12px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.catalog-select { background: var(--bg3); border: 1px solid var(--border2); border-radius: 6px; padding: 5px 10px; color: var(--text); font-size: 12px; font-family: var(--font); outline: none; cursor: pointer; }
+.catalog-table-wrap { flex: 1; overflow: auto; padding: 16px 20px; }
+.catalog-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.catalog-table th { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text3); font-weight: 500; padding: 0 10px 8px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.catalog-table td { padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.catalog-table tr:hover td { background: rgba(255,255,255,0.02); }
+.col-name { font-family: var(--mono); font-size: 11px; color: var(--accent); }
+.fk-link { font-family: var(--mono); font-size: 10px; background: rgba(129,140,248,0.1); color: var(--accent2); border: 1px solid rgba(129,140,248,0.2); border-radius: 4px; padding: 1px 6px; display: inline-flex; align-items: center; gap: 3px; }
+.null-bar { height: 4px; background: var(--bg4); border-radius: 2px; width: 60px; overflow: hidden; margin-top: 3px; }
+.null-fill { height: 100%; border-radius: 2px; }
+.pk-badge { font-size: 9px; background: rgba(110,231,183,0.1); color: var(--accent); border: 1px solid rgba(110,231,183,0.2); border-radius: 3px; padding: 1px 5px; font-family: var(--mono); }
+
+/* ── SCREEN 3: CLEANUP ── */
+#s3 { flex-direction: column; overflow: hidden; }
+.cleanup-summary { padding: 16px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 16px; flex-shrink: 0; background: var(--bg2); }
+.summary-stat { text-align: center; padding: 0 16px; border-right: 1px solid var(--border); }
+.summary-stat:last-child { border-right: none; }
+.summary-stat .ss-val { font-family: var(--mono); font-size: 22px; font-weight: 500; line-height: 1; }
+.summary-stat .ss-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; margin-top: 3px; }
+.cleanup-status { display: flex; align-items: center; gap: 8px; margin-left: auto; font-size: 12px; }
+.status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: pulse 2s infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+.status-dot.done { animation: none; }
+
+.cleanup-table-wrap { flex: 1; overflow: auto; padding: 20px 24px; }
+.cleanup-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.cleanup-table th { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text3); font-weight: 500; padding: 0 12px 10px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.cleanup-table td { padding: 11px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.cleanup-table tr:hover td { background: rgba(255,255,255,0.02); }
+.decision-badge { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 100px; font-size: 10px; font-family: var(--mono); font-weight: 500; }
+.d-impute { background: rgba(96,165,250,0.12); color: var(--blue); border: 1px solid rgba(96,165,250,0.2); }
+.d-drop { background: rgba(248,113,113,0.12); color: var(--danger); border: 1px solid rgba(248,113,113,0.2); }
+.d-cap { background: rgba(251,191,36,0.12); color: var(--accent3); border: 1px solid rgba(251,191,36,0.2); }
+.d-dedup { background: rgba(129,140,248,0.12); color: var(--accent2); border: 1px solid rgba(129,140,248,0.2); }
+.d-reformat { background: rgba(110,231,183,0.12); color: var(--accent); border: 1px solid rgba(110,231,183,0.2); }
+.d-skip { background: rgba(255,255,255,0.04); color: var(--text3); border: 1px solid var(--border); }
+.reasoning-text { font-size: 11px; color: var(--text2); line-height: 1.6; max-width: 340px; }
+
+/* ── SCREEN 4: QUERY ── */
+#s4 .split-2 { grid-template-columns: 340px 1fr; }
+
+.route-badge-wrap { padding: 8px 12px; display: flex; align-items: center; gap: 6px; border-bottom: 1px solid var(--border); flex-shrink: 0; font-size: 11px; color: var(--text3); }
+
+.q-canvas { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 14px; }
+.insight-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.insight-card { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; }
+.insight-card.warning { border-left: 3px solid var(--accent3); border-radius: 0 8px 8px 0; }
+.insight-card .ic-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+.insight-card .ic-val { font-family: var(--mono); font-size: 18px; font-weight: 500; line-height: 1; }
+.insight-card .ic-sub { font-size: 10px; color: var(--text3); margin-top: 3px; }
+.insight-card .ic-text { font-size: 11px; color: var(--text2); line-height: 1.6; }
+
+.chart-wrap { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+.chart-wrap h4 { font-size: 11px; color: var(--text2); margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; }
+
+.table-wrap { background: var(--bg3); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.table-header { padding: 10px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.table-header span { font-size: 11px; color: var(--text3); }
+.results-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.results-table th { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; padding: 8px 16px; border-bottom: 1px solid var(--border); text-align: left; font-weight: 500; }
+.results-table td { padding: 9px 16px; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 11px; }
+.results-table tr:last-child td { border-bottom: none; }
+.results-table tr:hover td { background: rgba(255,255,255,0.02); }
+.num-cell { color: var(--accent); }
+
+/* Scrollbars */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 2px; }
+
+.divider { height: 1px; background: var(--border); margin: 10px 0; }
+
+.section-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text3); font-weight: 500; margin-bottom: 10px; }
+
+.progress-bar { height: 3px; background: var(--bg4); border-radius: 2px; overflow: hidden; margin-top: 6px; }
+.progress-fill { height: 100%; border-radius: 2px; background: var(--accent); animation: progressAnim 2s ease-in-out infinite alternate; }
+@keyframes progressAnim { from { width: 60%; } to { width: 85%; } }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-brand">DataLens</div>
+  <div class="nav-steps">
+    <div class="nav-step done" onclick="showScreen(1)" id="nav1">
+      <div class="step-num"><span>1</span></div>
+      Upload + EDA
+    </div>
+    <div class="nav-arrow">›</div>
+    <div class="nav-step active" onclick="showScreen(2)" id="nav2">
+      <div class="step-num"><span>2</span></div>
+      Context Agent
+    </div>
+    <div class="nav-arrow">›</div>
+    <div class="nav-step locked" onclick="showScreen(3)" id="nav3">
+      <div class="step-num"><span>3</span></div>
+      Cleanup Agent
+    </div>
+    <div class="nav-arrow">›</div>
+    <div class="nav-step locked" onclick="showScreen(4)" id="nav4">
+      <div class="step-num"><span>4</span></div>
+      Query + Output
+    </div>
+  </div>
+</nav>
+
+<!-- ══════════════════════════════════════
+     SCREEN 1: UPLOAD + AUTO EDA
+══════════════════════════════════════ -->
+<div class="screen" id="s1">
+  <div class="split-2" style="grid-template-columns:340px 1fr;flex:1;overflow:hidden">
+
+    <div class="panel panel-left">
+      <div class="panel-header">
+        <h3>Data Source</h3>
+        <p>Upload a CSV file to begin</p>
+      </div>
+      <div class="panel-body">
+        <div class="upload-zone" style="display:none" id="upload-empty">
+          <div class="upload-icon">⬆</div>
+          <h4>Drop CSV file here</h4>
+          <p>or click to browse · max 50MB</p>
+        </div>
+
+        <div class="file-info">
+          <div class="file-name">ecommerce_orders_2024.csv</div>
+          <div class="file-meta">
+            <div class="file-meta-item"><div class="label">Rows</div><div class="val">12,847</div></div>
+            <div class="file-meta-item"><div class="label">Columns</div><div class="val">11</div></div>
+            <div class="file-meta-item"><div class="label">File size</div><div class="val">2.4 MB</div></div>
+            <div class="file-meta-item"><div class="label">Encoding</div><div class="val">UTF-8</div></div>
+          </div>
+        </div>
+
+        <div class="section-label" style="margin-top:14px">Data Quality Overview</div>
+        <div class="card" style="padding:10px 14px">
+          <div class="quality-row">
+            <span style="color:var(--text2);width:110px;flex-shrink:0">revenue</span>
+            <div class="quality-bar"><div class="quality-bar-fill" style="width:88%;background:var(--accent3)"></div></div>
+            <span style="color:var(--accent3);font-family:var(--mono);font-size:11px">12% nulls</span>
+          </div>
+          <div class="quality-row">
+            <span style="color:var(--text2);width:110px;flex-shrink:0">customer_id</span>
+            <div class="quality-bar"><div class="quality-bar-fill" style="width:97%;background:var(--accent)"></div></div>
+            <span style="color:var(--text3);font-family:var(--mono);font-size:11px">200 dupes</span>
+          </div>
+          <div class="quality-row">
+            <span style="color:var(--text2);width:110px;flex-shrink:0">order_date</span>
+            <div class="quality-bar"><div class="quality-bar-fill" style="width:99%;background:var(--accent)"></div></div>
+            <span style="color:var(--text3);font-family:var(--mono);font-size:11px">mixed fmt</span>
+          </div>
+          <div class="quality-row">
+            <span style="color:var(--text2);width:110px;flex-shrink:0">region</span>
+            <div class="quality-bar"><div class="quality-bar-fill" style="width:100%;background:var(--accent)"></div></div>
+            <span style="color:var(--text3);font-family:var(--mono);font-size:11px">case mismatch</span>
+          </div>
+          <div class="quality-row">
+            <span style="color:var(--text2);width:110px;flex-shrink:0">discount_pct</span>
+            <div class="quality-bar"><div class="quality-bar-fill" style="width:95%;background:var(--accent)"></div></div>
+            <span style="color:var(--text3);font-family:var(--mono);font-size:11px">15 outliers</span>
+          </div>
+        </div>
+
+        <div style="margin-top:16px;display:flex;gap:8px">
+          <button class="btn primary" style="flex:1" onclick="showScreen(2)">Continue to Context →</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel panel-right" style="display:flex;flex-direction:column;overflow:hidden">
+      <div class="canvas-header">
+        <h3>Auto EDA — Analysis Canvas</h3>
+        <span class="badge green">Complete</span>
+      </div>
+      <div style="flex:1;overflow-y:auto;padding:16px 20px">
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="s-label">Total Rows</div>
+            <div class="s-val">12,847</div>
+            <div class="s-sub">after parsing</div>
+          </div>
+          <div class="stat-card">
+            <div class="s-label">Null Cells</div>
+            <div class="s-val" style="color:var(--accent3)">1,541</div>
+            <div class="s-sub">across 3 columns</div>
+          </div>
+          <div class="stat-card">
+            <div class="s-label">Duplicates</div>
+            <div class="s-val" style="color:var(--accent3)">200</div>
+            <div class="s-sub">rows</div>
+          </div>
+          <div class="stat-card">
+            <div class="s-label">Date Range</div>
+            <div class="s-val" style="font-size:13px;margin-top:3px">Jan–Dec</div>
+            <div class="s-sub">2024 · 12 months</div>
+          </div>
+        </div>
+
+        <div class="warning-list">
+          <div class="warning-item">
+            <div class="wi-icon">⚠</div>
+            <div class="wi-text"><span class="wi-col">revenue</span> — 12.4% null values detected. Column contains string prefix "$" causing type coercion failures. Distribution is right-skewed (skew=2.3).</div>
+          </div>
+          <div class="warning-item">
+            <div class="wi-icon">⚠</div>
+            <div class="wi-text"><span class="wi-col">discount_pct</span> — 15 values exceed 100 (max: 340). Likely data entry errors. IQR fence at 1.5x flags these as outliers.</div>
+          </div>
+        </div>
+
+        <div class="charts-grid">
+          <div class="chart-card">
+            <h4>Revenue distribution</h4>
+            <div class="hist-bars">
+              <div class="hist-bar" style="height:20%"></div>
+              <div class="hist-bar" style="height:45%"></div>
+              <div class="hist-bar" style="height:100%"></div>
+              <div class="hist-bar" style="height:80%"></div>
+              <div class="hist-bar" style="height:55%"></div>
+              <div class="hist-bar" style="height:35%"></div>
+              <div class="hist-bar" style="height:20%"></div>
+              <div class="hist-bar" style="height:12%"></div>
+              <div class="hist-bar" style="height:8%"></div>
+              <div class="hist-bar" style="height:5%"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-top:5px;font-size:9px;color:var(--text3);font-family:var(--mono)">
+              <span>$0</span><span>$500</span><span>$1K</span><span>$5K+</span>
+            </div>
+            <div style="margin-top:8px;font-size:10px;color:var(--text3)">median $340 · mean $890 · right-skewed</div>
+          </div>
+
+          <div class="chart-card">
+            <h4>Orders by region</h4>
+            <div class="bar-chart">
+              <div class="bar" style="height:82%;background:rgba(110,231,183,0.6)"></div>
+              <div class="bar" style="height:65%;background:rgba(110,231,183,0.45)"></div>
+              <div class="bar" style="height:100%;background:rgba(110,231,183,0.7)"></div>
+              <div class="bar" style="height:48%;background:rgba(110,231,183,0.35)"></div>
+              <div class="bar" style="height:30%;background:rgba(110,231,183,0.25)"></div>
+            </div>
+            <div class="bar-labels">
+              <span class="bar-label">North</span>
+              <span class="bar-label">South</span>
+              <span class="bar-label">East</span>
+              <span class="bar-label">West</span>
+              <span class="bar-label">Central</span>
+            </div>
+          </div>
+
+          <div class="chart-card">
+            <h4>Monthly order volume</h4>
+            <svg width="100%" height="80" viewBox="0 0 220 80" preserveAspectRatio="none">
+              <polyline points="0,65 18,58 36,52 55,48 73,40 91,44 110,32 128,28 146,35 165,22 183,18 220,24"
+                fill="none" stroke="rgba(96,165,250,0.8)" stroke-width="1.5" stroke-linejoin="round"/>
+              <polyline points="0,65 18,58 36,52 55,48 73,40 91,44 110,32 128,28 146,35 165,22 183,18 220,24 220,80 0,80"
+                fill="rgba(96,165,250,0.08)" stroke="none"/>
+            </svg>
+            <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text3);font-family:var(--mono)">
+              <span>Jan</span><span>Apr</span><span>Jul</span><span>Oct</span><span>Dec</span>
+            </div>
+          </div>
+
+          <div class="chart-card">
+            <h4>Top correlations</h4>
+            <div style="display:flex;flex-direction:column;gap:7px;margin-top:4px">
+              <div style="font-size:11px">
+                <div style="display:flex;justify-content:space-between;color:var(--text2);margin-bottom:3px"><span>revenue ↔ quantity</span><span style="font-family:var(--mono);color:var(--accent)">+0.74</span></div>
+                <div style="height:3px;background:var(--bg4);border-radius:2px"><div style="width:74%;height:100%;background:var(--accent);border-radius:2px"></div></div>
+              </div>
+              <div style="font-size:11px">
+                <div style="display:flex;justify-content:space-between;color:var(--text2);margin-bottom:3px"><span>discount_pct ↔ revenue</span><span style="font-family:var(--mono);color:var(--danger)">−0.42</span></div>
+                <div style="height:3px;background:var(--bg4);border-radius:2px"><div style="width:42%;height:100%;background:var(--danger);border-radius:2px"></div></div>
+              </div>
+              <div style="font-size:11px">
+                <div style="display:flex;justify-content:space-between;color:var(--text2);margin-bottom:3px"><span>quantity ↔ discount_pct</span><span style="font-family:var(--mono);color:var(--text3)">+0.18</span></div>
+                <div style="height:3px;background:var(--bg4);border-radius:2px"><div style="width:18%;height:100%;background:var(--text3);border-radius:2px"></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SCREEN 2: CONTEXT AGENT
+══════════════════════════════════════ -->
+<div class="screen active" id="s2">
+  <div class="split-2" style="grid-template-columns:380px 1fr;flex:1;overflow:hidden">
+
+    <div class="panel panel-left" style="display:flex;flex-direction:column;overflow:hidden">
+      <div class="panel-header" style="flex-shrink:0">
+        <h3>Context Agent</h3>
+        <p>Building your semantic catalog</p>
+      </div>
+      <div class="chat-messages" id="chat-msgs">
+        <div class="msg agent">
+          <div class="msg-avatar">AI</div>
+          <div>
+            <div class="msg-bubble">I've profiled your dataset: <strong>ecommerce_orders_2024.csv</strong> — 12,847 rows, 11 columns.<br><br>A few things I need to clarify before I can build an accurate catalog:<br><br><strong>1.</strong> The <code style="background:rgba(110,231,183,0.1);padding:1px 4px;border-radius:3px;font-family:var(--mono);font-size:10px">revenue</code> column has values like <code style="background:rgba(110,231,183,0.1);padding:1px 4px;border-radius:3px;font-family:var(--mono);font-size:10px">$1,240.50</code>. Is this pre-tax or post-tax revenue, and is it always in USD?<br><br><strong>2.</strong> I see both <code style="background:rgba(110,231,183,0.1);padding:1px 4px;border-radius:3px;font-family:var(--mono);font-size:10px">customer_id</code> and <code style="background:rgba(110,231,183,0.1);padding:1px 4px;border-radius:3px;font-family:var(--mono);font-size:10px">order_id</code> columns. Can you confirm <code style="background:rgba(110,231,183,0.1);padding:1px 4px;border-radius:3px;font-family:var(--mono);font-size:10px">order_id</code> is the primary key for this table?</div>
+            <div class="msg-time">Context Agent · just now</div>
+          </div>
+        </div>
+
+        <div class="msg user">
+          <div class="msg-avatar">HV</div>
+          <div>
+            <div class="msg-bubble">Revenue is post-tax, always in USD. Yes, order_id is the primary key — each row is one order.</div>
+            <div class="msg-time">You · just now</div>
+          </div>
+        </div>
+
+        <div class="msg agent">
+          <div class="msg-avatar">AI</div>
+          <div>
+            <div class="msg-bubble">Got it — I've updated the catalog with that. Revenue marked as a <strong>USD post-tax measure</strong>, order_id set as primary key.<br><br><strong>3.</strong> The <code style="background:rgba(110,231,183,0.1);padding:1px 4px;border-radius:3px;font-family:var(--mono);font-size:10px">customer_id</code> column appears in what looks like another table's ID space — values like <code style="background:rgba(110,231,183,0.1);padding:1px 4px;border-radius:3px;font-family:var(--mono);font-size:10px">CUST_0042</code>. Is there a separate customers table this maps to?<br><br><strong>4.</strong> What does <code style="background:rgba(110,231,183,0.1);padding:1px 4px;border-radius:3px;font-family:var(--mono);font-size:10px">product_category</code> represent — is this an internal taxonomy or something customer-facing?</div>
+            <div class="msg-time">Context Agent · just now</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:8px;margin-left:34px">
+          <div class="typing-indicator">
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="chat-input-area">
+        <textarea class="chat-input" rows="2" placeholder="Reply to the agent...">No separate customers table — customer_id is a FK to a customers.csv we uploaded separately.</textarea>
+        <button class="btn primary" style="height:36px;flex-shrink:0">Send</button>
+      </div>
+
+      <div style="padding:10px 16px;border-top:1px solid var(--border);flex-shrink:0;display:flex;gap:8px;align-items:center">
+        <button class="btn sm" style="flex:1" onclick="showScreen(3)">✓ Mark Context Complete</button>
+        <div style="font-size:10px;color:var(--text3)">6 of ~11 columns cataloged</div>
+      </div>
+    </div>
+
+    <div class="catalog-panel">
+      <div class="catalog-toolbar">
+        <span style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.08em">Source table</span>
+        <select class="catalog-select">
+          <option>ecommerce_orders_2024</option>
+          <option>customers (linked)</option>
+        </select>
+        <span class="badge green" style="margin-left:auto">6 / 11 columns</span>
+      </div>
+      <div class="catalog-table-wrap">
+        <table class="catalog-table">
+          <thead>
+            <tr>
+              <th>Column</th>
+              <th>Type</th>
+              <th>Role</th>
+              <th>PK / FK</th>
+              <th>Null%</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="col-name">order_id</span></td>
+              <td><span class="badge gray">string</span></td>
+              <td><span class="badge green">identifier</span></td>
+              <td><span class="pk-badge">PK</span></td>
+              <td>
+                <span style="font-family:var(--mono);font-size:11px">0%</span>
+                <div class="null-bar"><div class="null-fill" style="width:0%;background:var(--accent)"></div></div>
+              </td>
+              <td style="font-size:11px;color:var(--text2)">Unique order identifier. System-generated (ORD_YYYYMMDD_XXXX format).</td>
+            </tr>
+            <tr>
+              <td><span class="col-name">customer_id</span></td>
+              <td><span class="badge gray">string</span></td>
+              <td><span class="badge purple">identifier</span></td>
+              <td><span class="fk-link">→ customers.id</span></td>
+              <td>
+                <span style="font-family:var(--mono);font-size:11px">0%</span>
+                <div class="null-bar"><div class="null-fill" style="width:0%;background:var(--accent)"></div></div>
+              </td>
+              <td style="font-size:11px;color:var(--text2)">FK to customers table. CUST_XXXX format. One customer can have multiple orders.</td>
+            </tr>
+            <tr>
+              <td><span class="col-name">revenue</span></td>
+              <td><span class="badge gray">float</span></td>
+              <td><span class="badge blue">measure</span></td>
+              <td>—</td>
+              <td>
+                <span style="font-family:var(--mono);font-size:11px;color:var(--accent3)">12.4%</span>
+                <div class="null-bar"><div class="null-fill" style="width:12%;background:var(--accent3)"></div></div>
+              </td>
+              <td style="font-size:11px;color:var(--text2)">Post-tax order revenue in USD. Stored with "$" prefix (needs cleaning). Right-skewed distribution.</td>
+            </tr>
+            <tr>
+              <td><span class="col-name">order_date</span></td>
+              <td><span class="badge gray">datetime</span></td>
+              <td><span class="badge amber">datetime</span></td>
+              <td>—</td>
+              <td>
+                <span style="font-family:var(--mono);font-size:11px">0.1%</span>
+                <div class="null-bar"><div class="null-fill" style="width:1%;background:var(--accent)"></div></div>
+              </td>
+              <td style="font-size:11px;color:var(--text2)">Order placement date. Mixed formats (ISO and DD/MM/YYYY). Range: Jan–Dec 2024.</td>
+            </tr>
+            <tr>
+              <td><span class="col-name">region</span></td>
+              <td><span class="badge gray">string</span></td>
+              <td><span class="badge green">dimension</span></td>
+              <td>—</td>
+              <td>
+                <span style="font-family:var(--mono);font-size:11px">0%</span>
+                <div class="null-bar"><div class="null-fill" style="width:0%;background:var(--accent)"></div></div>
+              </td>
+              <td style="font-size:11px;color:var(--text2)">Sales region. 5 values: North, South, East, West, Central. Case inconsistent.</td>
+            </tr>
+            <tr>
+              <td><span class="col-name">product_category</span></td>
+              <td><span class="badge gray">string</span></td>
+              <td><span class="badge green">dimension</span></td>
+              <td>—</td>
+              <td>
+                <span style="font-family:var(--mono);font-size:11px;color:var(--accent3)">3.1%</span>
+                <div class="null-bar"><div class="null-fill" style="width:3%;background:var(--accent3)"></div></div>
+              </td>
+              <td style="font-size:11px;color:var(--text2)">Awaiting clarification — internal taxonomy or customer-facing?</td>
+            </tr>
+            <tr style="opacity:0.4">
+              <td><span class="col-name">quantity</span></td>
+              <td><span class="badge gray">int</span></td>
+              <td><span class="badge gray">—</span></td>
+              <td>—</td>
+              <td><span style="font-size:11px;color:var(--text3)">pending</span></td>
+              <td style="font-size:11px;color:var(--text3)">Not yet cataloged</td>
+            </tr>
+            <tr style="opacity:0.4">
+              <td><span class="col-name">discount_pct</span></td>
+              <td><span class="badge gray">float</span></td>
+              <td><span class="badge gray">—</span></td>
+              <td>—</td>
+              <td><span style="font-size:11px;color:var(--text3)">pending</span></td>
+              <td style="font-size:11px;color:var(--text3)">Not yet cataloged</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SCREEN 3: CLEANUP AGENT
+══════════════════════════════════════ -->
+<div class="screen" id="s3">
+  <div class="cleanup-summary">
+    <div class="summary-stat">
+      <div class="ss-val" style="color:var(--accent3)">7</div>
+      <div class="ss-label">Issues found</div>
+    </div>
+    <div class="summary-stat">
+      <div class="ss-val">5</div>
+      <div class="ss-label">Columns affected</div>
+    </div>
+    <div class="summary-stat">
+      <div class="ss-val" style="color:var(--accent)">2,056</div>
+      <div class="ss-label">Rows modified</div>
+    </div>
+    <div class="summary-stat">
+      <div class="ss-val">200</div>
+      <div class="ss-label">Rows removed</div>
+    </div>
+    <div class="summary-stat">
+      <div class="ss-val" style="color:var(--accent)">12,647</div>
+      <div class="ss-label">Clean rows</div>
+    </div>
+    <div class="cleanup-status">
+      <div class="status-dot"></div>
+      <span style="font-size:12px;color:var(--text2)">Executing cleanup...</span>
+      <div style="width:120px">
+        <div class="progress-bar"><div class="progress-fill"></div></div>
+      </div>
+      <button class="btn sm" onclick="showScreen(4)" style="margin-left:8px">Skip to Query →</button>
+    </div>
+  </div>
+
+  <div class="cleanup-table-wrap">
+    <table class="cleanup-table">
+      <thead>
+        <tr>
+          <th>Column</th>
+          <th>Issue</th>
+          <th>Decision</th>
+          <th>Method</th>
+          <th>Rows affected</th>
+          <th>Agent Reasoning</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span style="font-family:var(--mono);font-size:11px;color:var(--accent)">revenue</span></td>
+          <td><span class="badge amber">type_mismatch</span></td>
+          <td><span class="decision-badge d-reformat">reformat</span></td>
+          <td><span style="font-family:var(--mono);font-size:11px;color:var(--text2)">strip_prefix + coerce_numeric</span></td>
+          <td><span style="font-family:var(--mono);font-size:11px">12,847</span></td>
+          <td class="reasoning-text">Column stored as string with "$" prefix. Catalog confirms this is a USD numeric measure. Stripping prefix and coercing to float preserves all values without data loss.</td>
+        </tr>
+        <tr>
+          <td><span style="font-family:var(--mono);font-size:11px;color:var(--accent)">revenue</span></td>
+          <td><span class="badge amber">missing_values</span></td>
+          <td><span class="decision-badge d-impute">impute</span></td>
+          <td><span style="font-family:var(--mono);font-size:11px;color:var(--text2)">median imputation</span></td>
+          <td><span style="font-family:var(--mono);font-size:11px">1,541</span></td>
+          <td class="reasoning-text">Revenue is a measure column with 12.4% nulls. Distribution is right-skewed (skew=2.3) — median ($340) is more robust than mean ($890). Dropping rows would bias dataset toward lower-value orders.</td>
+        </tr>
+        <tr>
+          <td><span style="font-family:var(--mono);font-size:11px;color:var(--accent)">customer_id</span></td>
+          <td><span class="badge red">duplicates</span></td>
+          <td><span class="decision-badge d-dedup">deduplicate</span></td>
+          <td><span style="font-family:var(--mono);font-size:11px;color:var(--text2)">keep_first by order_date</span></td>
+          <td><span style="font-family:var(--mono);font-size:11px">200</span></td>
+          <td class="reasoning-text">200 duplicate order_id rows found. Catalog confirms order_id is PK — duplicates are invalid. Keeping earliest entry by order_date as it is most likely to be the original record.</td>
+        </tr>
+        <tr>
+          <td><span style="font-family:var(--mono);font-size:11px;color:var(--accent)">order_date</span></td>
+          <td><span class="badge amber">inconsistent_format</span></td>
+          <td><span class="decision-badge d-reformat">reformat</span></td>
+          <td><span style="font-family:var(--mono);font-size:11px;color:var(--text2)">parse_datetime → ISO 8601</span></td>
+          <td><span style="font-family:var(--mono);font-size:11px">4,203</span></td>
+          <td class="reasoning-text">Catalog flags mixed date formats (ISO and DD/MM/YYYY). Both formats successfully parsed. Standardising to ISO 8601 for SQL compatibility. No ambiguous dates detected.</td>
+        </tr>
+        <tr>
+          <td><span style="font-family:var(--mono);font-size:11px;color:var(--accent)">region</span></td>
+          <td><span class="badge amber">inconsistent_format</span></td>
+          <td><span class="decision-badge d-reformat">reformat</span></td>
+          <td><span style="font-family:var(--mono);font-size:11px;color:var(--text2)">title_case standardise</span></td>
+          <td><span style="font-family:var(--mono);font-size:11px">3,841</span></td>
+          <td class="reasoning-text">Region is a dimension with 5 unique values stored inconsistently ("north", "NORTH", "North"). Title case chosen to match catalog definition. Cardinality preserved at 5.</td>
+        </tr>
+        <tr>
+          <td><span style="font-family:var(--mono);font-size:11px;color:var(--accent)">discount_pct</span></td>
+          <td><span class="badge red">outliers</span></td>
+          <td><span class="decision-badge d-cap">cap</span></td>
+          <td><span style="font-family:var(--mono);font-size:11px;color:var(--text2)">cap at 100 (domain max)</span></td>
+          <td><span style="font-family:var(--mono);font-size:11px">15</span></td>
+          <td class="reasoning-text">15 values exceed 100% — physically impossible for a discount. Domain constraint is 0–100. Capping at 100 rather than dropping, as these are likely data entry errors (e.g. 1500 entered instead of 15).</td>
+        </tr>
+        <tr>
+          <td><span style="font-family:var(--mono);font-size:11px;color:var(--accent)">product_category</span></td>
+          <td><span class="badge amber">missing_values</span></td>
+          <td><span class="decision-badge d-impute">impute</span></td>
+          <td><span style="font-family:var(--mono);font-size:11px;color:var(--text2)">constant → "Unknown"</span></td>
+          <td><span style="font-family:var(--mono);font-size:11px">399</span></td>
+          <td class="reasoning-text">Product category is a dimension with 3.1% nulls. Imputing with mode risks misclassification since catalog notes this may be customer-facing taxonomy. Using "Unknown" preserves data honesty and allows downstream filtering.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SCREEN 4: QUERY + OUTPUT
+══════════════════════════════════════ -->
+<div class="screen" id="s4">
+  <div class="split-2" style="grid-template-columns:320px 1fr;flex:1;overflow:hidden">
+
+    <div class="panel panel-left" style="display:flex;flex-direction:column;overflow:hidden">
+      <div class="panel-header" style="flex-shrink:0">
+        <h3>Query</h3>
+        <p>Ask anything about your data</p>
+      </div>
+
+      <div style="flex:1;overflow-y:auto;padding:12px 16px;display:flex;flex-direction:column;gap:10px">
+        <div style="padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;border-left:2px solid var(--text3)">
+          <div style="font-size:11px;color:var(--text2)">What are the top 5 regions by total revenue?</div>
+          <div style="margin-top:6px;display:flex;gap:5px"><span class="badge gray">SQL</span><span style="font-size:10px;color:var(--text3)">via text2sql agent</span></div>
+        </div>
+        <div style="padding:10px 12px;background:rgba(110,231,183,0.04);border:1px solid rgba(110,231,183,0.12);border-radius:8px;border-left:2px solid var(--accent)">
+          <div style="font-size:11px;color:var(--text2)">Show me the revenue distribution and flag any anomalies</div>
+          <div style="margin-top:6px;display:flex;gap:5px"><span class="badge green">EDA</span><span style="font-size:10px;color:var(--text3)">via eda agent</span></div>
+        </div>
+        <div style="padding:10px 12px;background:rgba(129,140,248,0.04);border:1px solid rgba(129,140,248,0.12);border-radius:8px;border-left:2px solid var(--accent2)">
+          <div style="font-size:11px;color:var(--text2)">Get Q4 orders by region and analyse the trend</div>
+          <div style="margin-top:6px;display:flex;gap:5px"><span class="badge purple">BOTH</span><span style="font-size:10px;color:var(--text3)">sql → eda pipeline</span></div>
+        </div>
+
+        <div style="padding:10px 12px;background:var(--bg3);border:1px solid var(--border);border-radius:8px">
+          <div style="font-size:11px;color:var(--text2);font-style:italic">Show me the revenue distribution and flag any anomalies</div>
+          <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:11px;color:var(--text2);line-height:1.6">Revenue shows a strong right skew (skew=2.3). Median order value is $340 vs mean of $890 — a small cohort of high-value orders is pulling the average up significantly. 47 statistical anomalies detected via Z-score &gt;3.</div>
+          <div style="margin-top:6px"><span class="badge green">EDA</span></div>
+        </div>
+      </div>
+
+      <div class="chat-input-area">
+        <textarea class="chat-input" rows="2" placeholder="Ask a question about your data...">Show me revenue by product category for Q4</textarea>
+        <button class="btn primary" style="height:36px;flex-shrink:0">Ask</button>
+      </div>
+    </div>
+
+    <div class="panel panel-right" style="display:flex;flex-direction:column;overflow:hidden">
+      <div class="canvas-header">
+        <div style="display:flex;align-items:center;gap:8px">
+          <h3>Analysis Canvas</h3>
+          <span class="badge green">EDA</span>
+          <span style="font-size:11px;color:var(--text3)">revenue distribution + anomaly detection</span>
+        </div>
+        <button class="btn sm">Export CSV</button>
+      </div>
+
+      <div class="q-canvas">
+        <div class="insight-grid">
+          <div class="insight-card">
+            <div class="ic-label">Median Revenue</div>
+            <div class="ic-val">$340</div>
+            <div class="ic-sub">robust central tendency</div>
+          </div>
+          <div class="insight-card">
+            <div class="ic-label">Mean Revenue</div>
+            <div class="ic-val" style="color:var(--accent3)">$890</div>
+            <div class="ic-sub">inflated by outliers</div>
+          </div>
+          <div class="insight-card">
+            <div class="ic-label">Distribution Skew</div>
+            <div class="ic-val" style="color:var(--accent3)">2.3</div>
+            <div class="ic-sub">strongly right-skewed</div>
+          </div>
+          <div class="insight-card warning">
+            <div class="ic-label">Anomalies (Z&gt;3)</div>
+            <div class="ic-val" style="color:var(--danger)">47</div>
+            <div class="ic-sub">rows flagged</div>
+          </div>
+          <div class="insight-card">
+            <div class="ic-label">Top 5% Revenue Share</div>
+            <div class="ic-val">48%</div>
+            <div class="ic-sub">of total revenue</div>
+          </div>
+          <div class="insight-card">
+            <div class="ic-label">IQR Range</div>
+            <div class="ic-val" style="font-size:14px;margin-top:2px">$180–$620</div>
+            <div class="ic-sub">middle 50% of orders</div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="chart-wrap">
+            <h4>
+              Revenue distribution (log scale)
+              <span class="badge blue" style="font-size:9px">histogram</span>
+            </h4>
+            <div class="hist-bars" style="height:90px">
+              <div class="hist-bar" style="height:12%;background:rgba(96,165,250,0.4)"></div>
+              <div class="hist-bar" style="height:28%;background:rgba(96,165,250,0.45)"></div>
+              <div class="hist-bar" style="height:72%;background:rgba(96,165,250,0.55)"></div>
+              <div class="hist-bar" style="height:100%;background:rgba(96,165,250,0.65)"></div>
+              <div class="hist-bar" style="height:85%;background:rgba(96,165,250,0.6)"></div>
+              <div class="hist-bar" style="height:60%;background:rgba(96,165,250,0.5)"></div>
+              <div class="hist-bar" style="height:38%;background:rgba(96,165,250,0.45)"></div>
+              <div class="hist-bar" style="height:22%;background:rgba(96,165,250,0.4)"></div>
+              <div class="hist-bar" style="height:14%;background:rgba(96,165,250,0.35)"></div>
+              <div class="hist-bar" style="height:8%;background:rgba(248,113,113,0.6)"></div>
+              <div class="hist-bar" style="height:5%;background:rgba(248,113,113,0.7)"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-top:5px;font-size:9px;color:var(--text3);font-family:var(--mono)">
+              <span>$0</span><span>$200</span><span>$500</span><span>$1K</span><span>$5K+</span>
+            </div>
+            <div style="margin-top:6px;font-size:10px;color:var(--danger)">▲ Red = anomaly zone (Z &gt; 3)</div>
+          </div>
+
+          <div class="chart-wrap">
+            <h4>
+              Revenue by region
+              <span class="badge green" style="font-size:9px">bar</span>
+            </h4>
+            <div class="bar-chart" style="height:90px">
+              <div class="bar" style="height:100%;background:rgba(110,231,183,0.6)"></div>
+              <div class="bar" style="height:72%;background:rgba(110,231,183,0.5)"></div>
+              <div class="bar" style="height:88%;background:rgba(110,231,183,0.55)"></div>
+              <div class="bar" style="height:55%;background:rgba(110,231,183,0.4)"></div>
+              <div class="bar" style="height:38%;background:rgba(110,231,183,0.35)"></div>
+            </div>
+            <div class="bar-labels">
+              <span class="bar-label">North</span>
+              <span class="bar-label">South</span>
+              <span class="bar-label">East</span>
+              <span class="bar-label">West</span>
+              <span class="bar-label">Central</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <div class="table-header">
+            <span>Revenue by region — query results</span>
+            <div style="display:flex;gap:6px;align-items:center">
+              <span class="badge gray">5 rows</span>
+              <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">SELECT region, SUM(revenue)...</span>
+            </div>
+          </div>
+          <table class="results-table">
+            <thead>
+              <tr>
+                <th>Region</th>
+                <th>Total Revenue</th>
+                <th>Order Count</th>
+                <th>Avg Order Value</th>
+                <th>Revenue Share</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>North</td>
+                <td class="num-cell">$2,401,840</td>
+                <td class="num-cell">3,241</td>
+                <td class="num-cell">$741</td>
+                <td><div style="display:flex;align-items:center;gap:6px"><div style="height:4px;width:80px;background:var(--bg4);border-radius:2px"><div style="height:100%;width:32%;background:var(--accent);border-radius:2px"></div></div><span style="font-family:var(--mono);font-size:10px">32%</span></div></td>
+              </tr>
+              <tr>
+                <td>East</td>
+                <td class="num-cell">$2,198,220</td>
+                <td class="num-cell">2,987</td>
+                <td class="num-cell">$736</td>
+                <td><div style="display:flex;align-items:center;gap:6px"><div style="height:4px;width:80px;background:var(--bg4);border-radius:2px"><div style="height:100%;width:29%;background:var(--accent);border-radius:2px"></div></div><span style="font-family:var(--mono);font-size:10px">29%</span></div></td>
+              </tr>
+              <tr>
+                <td>South</td>
+                <td class="num-cell">$1,782,410</td>
+                <td class="num-cell">2,544</td>
+                <td class="num-cell">$700</td>
+                <td><div style="display:flex;align-items:center;gap:6px"><div style="height:4px;width:80px;background:var(--bg4);border-radius:2px"><div style="height:100%;width:24%;background:var(--accent);border-radius:2px"></div></div><span style="font-family:var(--mono);font-size:10px">24%</span></div></td>
+              </tr>
+              <tr>
+                <td>West</td>
+                <td class="num-cell">$891,300</td>
+                <td class="num-cell">1,823</td>
+                <td class="num-cell">$489</td>
+                <td><div style="display:flex;align-items:center;gap:6px"><div style="height:4px;width:80px;background:var(--bg4);border-radius:2px"><div style="height:100%;width:12%;background:var(--accent);border-radius:2px"></div></div><span style="font-family:var(--mono);font-size:10px">12%</span></div></td>
+              </tr>
+              <tr>
+                <td>Central</td>
+                <td class="num-cell">$231,480</td>
+                <td class="num-cell">252</td>
+                <td class="num-cell">$919</td>
+                <td><div style="display:flex;align-items:center;gap:6px"><div style="height:4px;width:80px;background:var(--bg4);border-radius:2px"><div style="height:100%;width:3%;background:var(--accent);border-radius:2px"></div></div><span style="font-family:var(--mono);font-size:10px">3%</span></div></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div style="background:var(--bg3);border:1px solid rgba(110,231,183,0.15);border-left:2px solid var(--accent);border-radius:0 8px 8px 0;padding:12px 14px">
+          <div style="font-size:10px;color:var(--accent);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:5px">EDA Agent insight</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.7">Revenue is strongly right-skewed with a small cohort driving outsized value — top 5% of orders account for 48% of total revenue. North and East regions together represent 61% of revenue but Central has the highest avg order value ($919 vs $741 North), suggesting fewer but higher-value transactions. The 47 anomalous orders warrant review before any revenue forecasting.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function showScreen(n) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-step').forEach(s => {
+    s.classList.remove('active');
+    if (!s.classList.contains('locked') && !s.classList.contains('done')) {}
+  });
+  document.getElementById('s' + n).classList.add('active');
+
+  const steps = ['nav1','nav2','nav3','nav4'];
+  steps.forEach((id, i) => {
+    const el = document.getElementById(id);
+    el.classList.remove('active','done','locked');
+    if (i + 1 < n) el.classList.add('done');
+    else if (i + 1 === n) el.classList.add('active');
+    else el.classList.add('locked');
+  });
+
+  if (n === 3) {
+    document.getElementById('nav3').classList.remove('locked');
+    document.getElementById('nav3').classList.add('active');
+  }
+  if (n === 4) {
+    document.getElementById('nav4').classList.remove('locked');
+    document.getElementById('nav4').classList.add('active');
+  }
+}
+</script>
+</body>
+</html>

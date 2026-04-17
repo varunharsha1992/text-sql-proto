@@ -22,10 +22,10 @@
 
 **Purpose**: Project skeleton, dependency manifests, environment config. Nothing runs yet — just structure.
 
-- [ ] T001 Create directory structure: `backend/`, `backend/agents/`, `backend/tools/`, `backend/utils/`, `frontend/app/upload/`, `frontend/components/`, `frontend/lib/`, `data/uploads/`
-- [ ] T002 [P] Create `backend/requirements.txt` with all deps: fastapi, uvicorn[standard], python-multipart, aiosqlite, pandas, numpy, scipy, langchain, langchain-openai, langgraph, python-dotenv
-- [ ] T003 [P] Bootstrap `frontend/` as Next.js 14 App Router project (TypeScript strict, Tailwind CSS); add Recharts and install all deps via `npm install`
-- [ ] T004 Create `.env` at repo root with all env vars: `OPENAI_API_KEY`, `DATABASE_URL=sqlite+aiosqlite:///./data/app.db`, `UPLOAD_DIR=./data/uploads`, `MAX_FILE_SIZE_MB=50`, `PYTHON_REPL_TIMEOUT_SEC=30`
+- [X] T001 Create directory structure: `backend/`, `backend/agents/`, `backend/tools/`, `backend/utils/`, `frontend/app/upload/`, `frontend/components/`, `frontend/lib/`, `data/uploads/`
+- [X] T002 [P] Create `backend/requirements.txt` with all deps: fastapi, uvicorn[standard], python-multipart, aiosqlite, pandas, numpy, scipy, langchain, langchain-openai, langgraph, python-dotenv
+- [X] T003 [P] Bootstrap `frontend/` as Next.js 14 App Router project (TypeScript strict, Tailwind CSS); add Recharts and install all deps via `npm install`
+- [X] T004 Create `.env` at repo root with all env vars: `OPENAI_API_KEY`, `DATABASE_URL=sqlite+aiosqlite:///./data/app.db`, `UPLOAD_DIR=./data/uploads`, `MAX_FILE_SIZE_MB=50`, `PYTHON_REPL_TIMEOUT_SEC=30`
 
 **Checkpoint**: Directory tree exists, deps are declared, env vars are set. No running code yet.
 
@@ -37,9 +37,9 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T005 [P] Create `backend/database.py`: `create_tables()` (creates `uploads` + `jobs` tables per data-model.md schema), `create_upload()`, `update_upload_counts()`, `create_job()`, `update_job()`, `get_job()` — all async using `aiosqlite`; `DATABASE_URL` from env
-- [ ] T006 [P] Create `backend/models.py`: Pydantic v2 models — `InsightItem`, `ChartSpec`, `TableData`, `CanvasResponse`, `UploadResponse` (`upload_id`, `job_id`, `slug`), `JobResponse` (`job_id`, `status`, `result: CanvasResponse | None`, `error: str | None`); strict field types, no `Any`
-- [ ] T007 [P] Create `frontend/lib/types.ts`: TypeScript interfaces mirroring models.py exactly — `InsightItem`, `ChartSpec`, `TableData`, `CanvasResponse`, `UploadResponse`, `JobResponse`; all field types strict, no `any`
+- [X] T005 [P] Create `backend/database.py`: `create_tables()` (creates `uploads` + `jobs` tables per data-model.md schema), `create_upload()`, `update_upload_counts()`, `create_job()`, `update_job()`, `get_job()` — all async using `aiosqlite`; `DATABASE_URL` from env
+- [X] T006 [P] Create `backend/models.py`: Pydantic v2 models — `InsightItem`, `ChartSpec`, `TableData`, `CanvasResponse`, `UploadResponse` (`upload_id`, `job_id`, `slug`), `JobResponse` (`job_id`, `status`, `result: CanvasResponse | None`, `error: str | None`); strict field types, no `Any`
+- [X] T007 [P] Create `frontend/lib/types.ts`: TypeScript interfaces mirroring models.py exactly — `InsightItem`, `ChartSpec`, `TableData`, `CanvasResponse`, `UploadResponse`, `JobResponse`; all field types strict, no `any`
 
 **Checkpoint**: Backend schema + models consistent with `data-model.md`. Frontend types consistent with TypeScript interfaces in `contracts/`. Ready for implementation.
 
@@ -53,21 +53,21 @@
 
 ### Backend Pipeline
 
-- [ ] T008 [US1] Create `backend/utils/csv_parser.py`: `parse_csv_to_sqlite(upload_id, file_path)` — reads CSV with pandas, applies the 5 coercion rules in order (whitespace strip → currency strip → date normalisation → numeric coercion → null preservation), writes result to `raw_{upload_id}` SQLite table, calls `update_upload_counts()`; no LLM involved (depends on T005)
-- [ ] T009 [US1] Create all 4 AutoEDA tools **and** the AutoEDA agent together — these are tightly coupled and best written as a unit: (depends on T005, T006, T008)
+- [X] T008 [US1] Create `backend/utils/csv_parser.py`: `parse_csv_to_sqlite(upload_id, file_path)` — reads CSV with pandas, applies the 5 coercion rules in order (whitespace strip → currency strip → date normalisation → numeric coercion → null preservation), writes result to `raw_{upload_id}` SQLite table, calls `update_upload_counts()`; no LLM involved (depends on T005)
+- [X] T009 [US1] Create all 4 AutoEDA tools **and** the AutoEDA agent together — these are tightly coupled and best written as a unit: (depends on T005, T006, T008)
   - `backend/tools/dataframe.py`: `get_dataframe_profile(upload_id)` — reads `raw_{upload_id}`, returns shape/dtypes/null counts/nunique/describe stats; sync read-only
   - `backend/tools/python_repl.py`: `run_python_analysis(upload_id, code)` — sandboxed `exec()` against `raw_{upload_id}` dataframe; allowed imports: pandas, numpy, scipy.stats, datetime; 30s timeout via `PYTHON_REPL_TIMEOUT_SEC`; returns stdout string or error string (never raises)
   - `backend/tools/chart.py`: `generate_chart_spec(chart_type, title, x_label, y_label, data)` — validates chart_type against allowed set, validates data is `list[dict]` with `x`/`y` keys, returns normalised `ChartSpec` dict; sync
   - `backend/tools/autoeda_writer.py`: `write_autoeda_result(upload_id, canvas_response)` — async; serialises `CanvasResponse` dict to JSON, calls `update_job()` with `status="done"` and `result=json`; returns `True` on success, error string on failure
   - `backend/agents/autoeda.py`: `SYSTEM_PROMPT` constant (role persona from spec); LangGraph `StateGraph` single-node agent; binds all 4 tools; runs 7 fixed analyses via `run_python_analysis`; chart selection logic (histogram/bar/scatter/line/heatmap per data condition); calls `write_autoeda_result` last; max 5 charts
-- [ ] T010 [US1] Create `backend/main.py`: FastAPI app setup with CORS + lifespan (`create_tables()` on startup); `POST /api/upload` route (validate file type + size, save to `UPLOAD_DIR`, `create_upload()`, `create_job()`, schedule `run_autoeda_pipeline()` via `BackgroundTasks`, return `UploadResponse`); `GET /api/jobs/{job_id}` route (calls `get_job()`, returns `JobResponse`, 404 if missing); `run_autoeda_pipeline()` background fn (`update_job(running)` → `parse_csv_to_sqlite()` → `autoeda_agent.ainvoke()` → error handler sets `update_job(error)`) (depends on T005, T006, T008, T009)
+- [X] T010 [US1] Create `backend/main.py`: FastAPI app setup with CORS + lifespan (`create_tables()` on startup); `POST /api/upload` route (validate file type + size, save to `UPLOAD_DIR`, `create_upload()`, `create_job()`, schedule `run_autoeda_pipeline()` via `BackgroundTasks`, return `UploadResponse`); `GET /api/jobs/{job_id}` route (calls `get_job()`, returns `JobResponse`, 404 if missing); `run_autoeda_pipeline()` background fn (`update_job(running)` → `parse_csv_to_sqlite()` → `autoeda_agent.ainvoke()` → error handler sets `update_job(error)`) (depends on T005, T006, T008, T009)
 
 ### Frontend Wiring
 
-- [ ] T011 [P] [US1] Create `frontend/lib/api.ts` and `frontend/lib/hooks.ts` together — coupled by design: (depends on T007)
+- [X] T011 [P] [US1] Create `frontend/lib/api.ts` and `frontend/lib/hooks.ts` together — coupled by design: (depends on T007)
   - `api.ts`: `uploadFile(file: File): Promise<UploadResponse>` (POST /api/upload, multipart), `getJob(jobId: string): Promise<JobResponse>` (GET /api/jobs/{jobId}); all typed, no raw `fetch()` in components
   - `hooks.ts`: `useUploadId()` — stores/retrieves `upload_id` + `slug` from `localStorage` + React context; `usePolling(jobId: string, interval?: number)` — polls `getJob()` every 2s, stops on `done`/`error`, returns `{ status, result, error }`
-- [ ] T012 [P] [US1] Create `frontend/app/page.tsx` (root redirect to `/upload`) and scaffold `frontend/app/upload/page.tsx`: upload zone (drag-and-drop + file picker), file metadata panel (filename in monospace, row/col count, file size, encoding), upload progress state, left panel layout per spec wireframe; wire `uploadFile()` on file select → store IDs via `useUploadId()` → start `usePolling()` (depends on T007, T011)
+- [X] T012 [P] [US1] Create `frontend/app/page.tsx` (root redirect to `/upload`) and scaffold `frontend/app/upload/page.tsx`: upload zone (drag-and-drop + file picker), file metadata panel (filename in monospace, row/col count, file size, encoding), upload progress state, left panel layout per spec wireframe; wire `uploadFile()` on file select → store IDs via `useUploadId()` → start `usePolling()` (depends on T007, T011)
 
 **Checkpoint (US1 partial)**: Upload works end-to-end — file uploads, job is created, background agent runs, polling returns `done`. Canvas placeholder is visible but not yet rendering. "Continue" button not yet active.
 
@@ -79,9 +79,9 @@
 
 **Independent Test**: Upload demo CSV. Canvas shows at least two warning items identifying specific columns with quality issues, each with its percentage or count.
 
-- [ ] T013 [P] [US2] Create `frontend/components/InsightCards.tsx`: renders a single `InsightItem`; variants: `stat` (label + large monospace value + sub-label, optional `color` tinting), `warning` (amber left-border card with icon + text + highlighted column name in monospace), `text` (narrative card), `badge` (pill badge); matches design system colours from prototype (`--accent3` for amber, `--danger` for red, `--accent` for green)
-- [ ] T014 [US2] Create `frontend/components/Canvas.tsx`: renders full `CanvasResponse`; top section = 4-column stat grid (maps `type: "stat"` InsightItems); middle section = warning list (maps `type: "warning"` InsightItems, shown only if any exist); bottom section = charts placeholder (populated in US3); header with "Auto EDA — Analysis Canvas" label + status badge; loading skeleton state when `status = "running"` (depends on T013)
-- [ ] T015 [US2] Wire `Canvas` into `frontend/app/upload/page.tsx`: import and render `Canvas` in the right panel; pass `result` (from `usePolling`) to `Canvas`; show skeleton while `status = "pending"` or `"running"`; on `status = "done"` render stat cards + quality warnings; data quality overview section in left panel (column-level null % bars per prototype) (depends on T012, T014)
+- [X] T013 [P] [US2] Create `frontend/components/InsightCards.tsx`: renders a single `InsightItem`; variants: `stat` (label + large monospace value + sub-label, optional `color` tinting), `warning` (amber left-border card with icon + text + highlighted column name in monospace), `text` (narrative card), `badge` (pill badge); matches design system colours from prototype (`--accent3` for amber, `--danger` for red, `--accent` for green)
+- [X] T014 [US2] Create `frontend/components/Canvas.tsx`: renders full `CanvasResponse`; top section = 4-column stat grid (maps `type: "stat"` InsightItems); middle section = warning list (maps `type: "warning"` InsightItems, shown only if any exist); bottom section = charts placeholder (populated in US3); header with "Auto EDA — Analysis Canvas" label + status badge; loading skeleton state when `status = "running"` (depends on T013)
+- [X] T015 [US2] Wire `Canvas` into `frontend/app/upload/page.tsx`: import and render `Canvas` in the right panel; pass `result` (from `usePolling`) to `Canvas`; show skeleton while `status = "pending"` or `"running"`; on `status = "done"` render stat cards + quality warnings; data quality overview section in left panel (column-level null % bars per prototype) (depends on T012, T014)
 
 **Checkpoint (US2)**: Upload demo CSV → canvas shows 4 stat cards including amber "200 duplicates" + at least 2 quality warning banners for `revenue` nulls and `discount_pct` outliers.
 
@@ -93,8 +93,8 @@
 
 **Independent Test**: Upload demo CSV. At least 2 charts appear with titles, axis labels, and data matching the dataset. No more than 5 charts shown.
 
-- [ ] T016 [P] [US3] Create `frontend/components/ChartRenderer.tsx`: Recharts wrapper that renders a single `ChartSpec`; supports all 6 types (`bar` → `BarChart`, `histogram` → `BarChart` with no gap, `line` → `LineChart`, `scatter` → `ScatterChart`, `heatmap` → custom grid, `boxplot` → `ComposedChart`); responsive container; axis labels from `x_label`/`y_label`; colour palette matches prototype design tokens; no `any` types
-- [ ] T017 [US3] Add charts section to `Canvas.tsx` and activate "Continue" button: render `charts` array using `ChartRenderer` in a 2-column grid (matches prototype `charts-grid`); enable "Continue to Context →" button in `upload/page.tsx` only when `status === "done"`; button navigates to `/context` (depends on T015, T016)
+- [X] T016 [P] [US3] Create `frontend/components/ChartRenderer.tsx`: Recharts wrapper that renders a single `ChartSpec`; supports all 6 types (`bar` → `BarChart`, `histogram` → `BarChart` with no gap, `line` → `LineChart`, `scatter` → `ScatterChart`, `heatmap` → custom grid, `boxplot` → `ComposedChart`); responsive container; axis labels from `x_label`/`y_label`; colour palette matches prototype design tokens; no `any` types
+- [X] T017 [US3] Add charts section to `Canvas.tsx` and activate "Continue" button: render `charts` array using `ChartRenderer` in a 2-column grid (matches prototype `charts-grid`); enable "Continue to Context →" button in `upload/page.tsx` only when `status === "done"`; button navigates to `/context` (depends on T015, T016)
 
 **Checkpoint (US3)**: Full demo smoke test — upload CSV → stat cards + warnings + charts all render. "Continue" button active. All US1/US2/US3 acceptance criteria met.
 
@@ -104,9 +104,9 @@
 
 **Purpose**: Error resilience, NavBar state, and final smoke test validation.
 
-- [ ] T018 [P] Create `frontend/components/NavBar.tsx`: 3-step progress bar; step 1 `active` on upload page; `locked` state (opacity + `cursor-not-allowed`) for steps 2 and 3 until prerequisites complete; `done` state (checkmark) for step 1 after EDA completes; reads step unlock state from `useUploadId()` context (depends on T012)
-- [ ] T019 [P] Add error state to `frontend/app/upload/page.tsx`: when `usePolling` returns `status === "error"`, show error message card in canvas area with the `error` string + a "Try Again" button that clears state and re-shows the upload zone; wrap `uploadFile()` call in try/catch for network errors (depends on T015)
-- [ ] T020 Run end-to-end smoke test per `quickstart.md`: start backend + frontend, upload demo CSV, verify all 6 success criteria from spec.md are met, inspect SQLite `uploads` + `jobs` tables, confirm `raw_{upload_id}` table exists with coerced data (depends on T017, T018, T019)
+- [X] T018 [P] Create `frontend/components/NavBar.tsx`: 3-step progress bar; step 1 `active` on upload page; `locked` state (opacity + `cursor-not-allowed`) for steps 2 and 3 until prerequisites complete; `done` state (checkmark) for step 1 after EDA completes; reads step unlock state from `useUploadId()` context (depends on T012)
+- [X] T019 [P] Add error state to `frontend/app/upload/page.tsx`: when `usePolling` returns `status === "error"`, show error message card in canvas area with the `error` string + a "Try Again" button that clears state and re-shows the upload zone; wrap `uploadFile()` call in try/catch for network errors (depends on T015)
+- [X] T020 Run end-to-end smoke test per `quickstart.md`: start backend + frontend, upload demo CSV, verify all 6 success criteria from spec.md are met, inspect SQLite `uploads` + `jobs` tables, confirm `raw_{upload_id}` table exists with coerced data (depends on T017, T018, T019)
 
 **Checkpoint**: Feature complete. All spec success criteria verified manually.
 

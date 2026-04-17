@@ -1,0 +1,257 @@
+# ============================================================
+# DataLens — CursorRules
+# Text2SQL + EDA Agent · Next.js 14 + FastAPI + LangGraph
+# ============================================================
+
+# ------------------------------------------------------------
+# STACK
+# ------------------------------------------------------------
+backend_runtime: Python 3.11
+backend_framework: FastAPI (async)
+agent_framework: LangGraph + LangChain
+llm: OpenAI GPT-4o (model string: "gpt-4o")
+database: SQLite via aiosqlite (file: data/app.db)
+frontend_framework: Next.js 14 (app router, TypeScript strict)
+frontend_styling: Tailwind CSS (utility classes only, no inline styles)
+charts: Recharts
+package_manager_backend: pip (always use --break-system-packages)
+package_manager_frontend: npm
+
+# ------------------------------------------------------------
+# PROJECT STRUCTURE — never deviate from this layout
+# ------------------------------------------------------------
+# backend/
+#   main.py                  ← all 9 routes, nothing else
+#   database.py              ← SQLite init, table creation, helper fns
+#   models.py                ← all Pydantic request/response schemas
+#   agents/
+#     autoeda.py             ← AutoEDA LangGraph agent
+#     context.py             ← Context LangGraph agent
+#     cleanup.py             ← Cleanup LangGraph agent
+#     query_graph.py         ← 3-node LangGraph (router→sql→eda)
+#   tools/
+#     dataframe.py           ← get_dataframe_profile, sample_column_values
+#     catalog.py             ← get_catalog, write_catalog_entry, get_catalog_summary, get_catalog_detail
+#     python_repl.py         ← run_python_analysis, run_python_cleaning
+#     sql.py                 ← execute_sql, write_query_result
+#     chart.py               ← generate_chart_spec
+#
+# frontend/
+#   app/
+#     upload/page.tsx        ← Screen 1
+#     context/page.tsx       ← Screen 2
+#     cleanup/page.tsx       ← Screen 3
+#     query/page.tsx         ← Screen 4
+#   components/
+#     Canvas.tsx             ← shared canvas renderer
+#     ChartRenderer.tsx      ← Recharts wrapper
+#     InsightCards.tsx       ← stat/text/warning cards
+#     ChatPanel.tsx          ← shared chat UI
+#     CatalogTable.tsx       ← Screen 2 right panel
+#     CleanupLog.tsx         ← Screen 3 decision table
+#     NavBar.tsx             ← step progress nav
+#   lib/
+#     api.ts                 ← all typed fetch wrappers (9 endpoints only)
+#     types.ts               ← CanvasResponse, ChartSpec, CatalogRow, etc.
+#     hooks.ts               ← usePolling, useChatTurn, useUploadId
+
+# ------------------------------------------------------------
+# THE 9 ENDPOINTS — no more, no less
+# ------------------------------------------------------------
+# POST /api/upload
+# GET  /api/jobs/{job_id}
+# GET  /api/upload/{id}/autoeda
+# POST /api/context/{id}/chat
+# GET  /api/context/{id}/catalog
+# POST /api/context/{id}/complete
+# GET  /api/cleanup/{id}/log
+# POST /api/query/{id}
+# GET  /api/query/{id}/history
+
+# ------------------------------------------------------------
+# TWO INTERACTION PATTERNS — apply consistently
+# ------------------------------------------------------------
+# Pattern A (Fire & Poll): Screen 1, Screen 3
+#   - Route returns { job_id } immediately
+#   - Agent runs in FastAPI BackgroundTasks
+#   - Frontend polls GET /api/jobs/{job_id} every 2s
+#   - Job writes result to jobs.result (JSON), sets status="done"
+#   - Never block the HTTP response waiting for agent completion
+#
+# Pattern B (Turn-based JSON): Screen 2, Screen 4
+#   - Route awaits agent.invoke() synchronously
+#   - Agent returns { chat: str, canvas: CanvasResponse }
+#   - Route returns this dict directly — no job_id, no polling
+#   - Agent must also write canvas data to SQLite via tools before returning
+#   - Acceptable latency: up to 12s per turn for demo
+
+# ------------------------------------------------------------
+# ASYNC RULES
+# ------------------------------------------------------------
+# All FastAPI route functions must be async def
+# Use aiosqlite for all database operations — no sync sqlite3
+# BackgroundTasks for Pattern A — never asyncio.create_task directly
+# LangGraph agents: use await graph.ainvoke() not graph.invoke()
+# Never use time.sleep() — use asyncio.sleep() if delay needed
+
+# ------------------------------------------------------------
+# DATABASE RULES
+# ------------------------------------------------------------
+# SQLite is the single source of truth — no in-memory state
+# All tables defined in database.py:create_tables() — nowhere else
+# Table naming conventions (strictly enforced):
+#   jobs                   ← async job state for Pattern A
+#   uploads                ← upload metadata
+#   catalog                ← semantic catalog rows (one per column)
+#   context_conversations  ← Screen 2 chat history
+#   cleanup_log            ← one row per cleanup decision
+#   query_history          ← Screen 4 query + result history
+#   raw_{upload_id}        ← original CSV data (dynamic)
+#   clean_{upload_id}      ← cleaned data post-cleanup (dynamic)
+#
+# jobs table schema (do not modify):
+#   job_id TEXT PK, job_type TEXT, upload_id TEXT,
+#   status TEXT DEFAULT "pending", result TEXT, error TEXT,
+#   created_at DATETIME, updated_at DATETIME
+#
+# Helper functions that must exist in database.py:
+#   create_job(job_id, job_type, upload_id) -> None
+#   update_job(job_id, status, result=None, error=None) -> None
+#   get_job(job_id) -> dict
+#   get_catalog(upload_id, table_name=None) -> list[dict]
+#   save_conversation(upload_id, role, message) -> None
+#   get_conversation_history(upload_id) -> list[dict]
+
+# ------------------------------------------------------------
+# AGENT RULES
+# ------------------------------------------------------------
+# Agent = LangGraph StateGraph or single-node graph
+# All agents live in backend/agents/ — no agent code in main.py or tools/
+# All agent system prompts are constants at TOP of each agent file
+# System prompt format: triple-quoted string, named SYSTEM_PROMPT
+# Agent output must always be a dict with exactly these keys:
+#   Pattern B agents: { "chat": str, "canvas": CanvasResponse }
+#   Pattern A agents: write result to jobs table, return None
+#
+# LangGraph graph state must be a TypedDict — no plain dicts
+# Nodes must only modify state via return value — no side effects
+# Tools are the ONLY way agents write to SQLite — direct db calls from agents are forbidden
+#
+# query_graph.py node structure (do not change):
+#   router_node  → sets state["route"] = "sql" | "eda" | "both"
+#   text2sql_node → runs if route in ["sql", "both"]
+#   eda_node     → runs if route in ["eda", "both"]
+#   edges: router→text2sql (conditional), router→eda (conditional),
+#          text2sql→eda (if both), text2sql→END, eda→END
+
+# ------------------------------------------------------------
+# TOOL RULES
+# ------------------------------------------------------------
+# All tools: pure Python functions decorated with @tool (langchain_core.tools)
+# Every tool must have a docstring describing: inputs, output, side effects
+# All tools must have full type hints on all parameters and return type
+# Tools that write to SQLite must use aiosqlite and be async def
+# Tools that only read may be sync
+# Error handling: tools RETURN error strings, never raise exceptions
+#   return {"error": "column 'foo' not found"} not raise ValueError
+# Tools that execute Python code (run_python_analysis, run_python_cleaning):
+#   allowed imports: pandas, numpy, scipy.stats, datetime ONLY
+#   execution timeout: 30 seconds (PYTHON_REPL_TIMEOUT_SEC env var)
+#   no file I/O, no network calls, no subprocess inside REPL
+# execute_sql tool:
+#   always queries clean_{upload_id} — NEVER raw_{upload_id}
+#   always add LIMIT 500 if query has no LIMIT clause
+#   max 2 auto-retries on SQL error before returning error string
+#   never concatenate user input into SQL strings
+
+# ------------------------------------------------------------
+# CANVAS RESPONSE CONTRACT — canonical types (do not modify)
+# ------------------------------------------------------------
+# TypeScript (frontend/lib/types.ts):
+#
+# interface CanvasResponse {
+#   insights: InsightItem[]
+#   charts: ChartSpec[]
+#   table: TableData | null
+# }
+# interface InsightItem {
+#   type: "stat" | "text" | "warning" | "badge"
+#   label?: string
+#   value?: string
+#   content?: string
+#   color?: "green" | "amber" | "red"
+# }
+# interface ChartSpec {
+#   type: "bar" | "line" | "histogram" | "scatter" | "heatmap" | "boxplot"
+#   title: string
+#   x_label: string
+#   y_label: string
+#   data: { x: string | number; y: number }[]
+# }
+# interface TableData {
+#   columns: string[]
+#   rows: (string | number | null)[][]
+# }
+#
+# Python equivalent (models.py) must match exactly — use Pydantic models
+# Agents return CanvasResponse as a plain dict matching this shape
+# Frontend Canvas.tsx is the ONLY component that renders CanvasResponse
+# ChartRenderer.tsx is the ONLY component that renders ChartSpec
+
+# ------------------------------------------------------------
+# FRONTEND RULES
+# ------------------------------------------------------------
+# TypeScript strict mode — no `any` types anywhere
+# No inline styles — Tailwind utility classes only
+# No React class components — functional components with hooks only
+# No useEffect for data fetching — use custom hooks from lib/hooks.ts
+# upload_id stored in React context (lib/hooks.ts:useUploadId)
+# All API calls go through lib/api.ts — no raw fetch() in components
+# Two hooks cover all data patterns:
+#   usePolling(jobId, interval=2000): for Pattern A screens
+#   useChatTurn(endpoint): for Pattern B screens
+# NavBar shows locked state for screens whose prerequisite isn't complete
+# Screen 3 polls BOTH /api/jobs/{jobId} AND /api/cleanup/{id}/log
+
+# ------------------------------------------------------------
+# SECURITY
+# ------------------------------------------------------------
+# Never concatenate user input into SQL — parameterised queries always
+# SQL execution only against clean_{upload_id} tables
+# Python REPL: restricted to pandas/numpy/scipy.stats/datetime imports
+# Python REPL: no access to os, sys, subprocess, open, or __import__
+# API keys from environment variables only — never hardcoded
+# Never log or return raw file contents in API responses
+
+# ------------------------------------------------------------
+# ERROR HANDLING CONVENTIONS
+# ------------------------------------------------------------
+# FastAPI routes: wrap agent calls in try/except, return HTTP 500 with detail
+# Background tasks: catch all exceptions, call update_job(status="error", error=str(e))
+# Tools: return {"error": "..."} dict — never raise
+# Frontend: every API call wrapped in try/catch, show error state in UI
+# If agent invoke fails: set job status="error", frontend shows retry button
+
+# ------------------------------------------------------------
+# ENVIRONMENT VARIABLES (.env — never hardcode)
+# ------------------------------------------------------------
+# OPENAI_API_KEY=
+# DATABASE_URL=sqlite+aiosqlite:///./data/app.db
+# UPLOAD_DIR=./data/uploads
+# MAX_FILE_SIZE_MB=50
+# PYTHON_REPL_TIMEOUT_SEC=30
+
+# ------------------------------------------------------------
+# WHAT TO NEVER GENERATE
+# ------------------------------------------------------------
+# No WebSockets or SSE — plain HTTP polling only
+# No Redis, Celery, or any external queue — BackgroundTasks only
+# No auth middleware, JWT, or session management
+# No Alembic migrations — database.py:create_tables() handles schema
+# No Docker or deployment config — local dev only
+# No console.log in frontend production code — use proper error boundaries
+# No print() in backend — use Python logging module
+# No additional endpoints beyond the 9 defined above
+# No agent code outside backend/agents/
+# No direct SQLite writes outside backend/tools/
+# No additional LangGraph nodes in query_graph.py beyond router, text2sql, eda
