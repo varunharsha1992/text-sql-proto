@@ -1,0 +1,35 @@
+﻿---
+description: Project Development Guidelines
+globs: ["**/*"]
+alwaysApply: true
+---
+# text-sql-proto Development Guidelines
+
+Auto-generated from all feature plans. Last updated: 2026-04-17
+
+## Active Technologies
+
+- Python 3.11 (backend) · TypeScript strict (frontend) + FastAPI (async routes, BackgroundTasks) · LangGraph + LangChain · OpenAI GPT-4o · aiosqlite · pandas · Next.js 14 (App Router) · Tailwind CSS · Recharts (001-upload-auto-eda)
+
+## Project Structure
+
+```text
+backend/
+frontend/
+tests/
+```
+
+## Commands
+
+cd src; pytest; ruff check .
+
+## Code Style
+
+Python 3.11 (backend) · TypeScript strict (frontend): Follow standard conventions
+
+## Recent Changes
+
+- 001-upload-auto-eda: Added Python 3.11 (backend) · TypeScript strict (frontend) + FastAPI (async routes, BackgroundTasks) · LangGraph + LangChain · OpenAI GPT-4o · aiosqlite · pandas · Next.js 14 (App Router) · Tailwind CSS · Recharts
+
+<!-- MANUAL ADDITIONS START -->
+<!-- MANUAL ADDITIONS END -->
