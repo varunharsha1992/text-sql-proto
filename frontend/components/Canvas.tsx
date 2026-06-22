@@ -99,7 +99,7 @@ export default function Canvas({ result, status, progress }: CanvasProps) {
 
   return (
     <div
-      className="rounded-xl border overflow-hidden flex flex-col"
+      className="rounded-xl border overflow-hidden flex flex-col flex-1 min-h-0"
       style={{ borderColor: "var(--border)", background: "var(--bg2)" }}
     >
       {/* Header */}
@@ -116,7 +116,8 @@ export default function Canvas({ result, status, progress }: CanvasProps) {
         <StatusBadge status={status} />
       </div>
 
-      {/* Body */}
+      {/* Body (scrollable region; header stays pinned) */}
+      <div className="flex-1 min-h-0 overflow-y-auto">
       {isLoading && (
         <div className="p-5 space-y-4">
           {progress && progress.length > 0 && <AgentProgress items={progress} />}
@@ -178,6 +179,7 @@ export default function Canvas({ result, status, progress }: CanvasProps) {
           No analysis available.
         </div>
       )}
+      </div>
     </div>
   );
 }
