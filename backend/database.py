@@ -175,8 +175,8 @@ async def update_job_progress(job_id: str, progress_json: str) -> None:
 
 async def update_upload_artifacts(
     upload_id: str,
-    data_dictionary: str,
-    semantic_layer: str,
+    data_dictionary: str | None,
+    semantic_layer: str | None,
 ) -> None:
     db = await get_db()
     try:

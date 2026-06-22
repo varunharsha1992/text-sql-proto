@@ -11,7 +11,7 @@ import aiosqlite
 from dotenv import load_dotenv
 from langchain_core.tools import tool
 
-from backend.database import update_job
+from backend.database import update_job, update_upload_artifacts
 
 load_dotenv()
 
@@ -40,12 +40,20 @@ async def _find_job_id(upload_id: str) -> str | None:
 
 
 async def persist_autoeda_canvas(upload_id: str, canvas_response: dict) -> None:
-    """Write CanvasResponse JSON to the latest job for this upload and mark done."""
+    """Write CanvasResponse JSON to the latest job (status=done) and mirror
+    data_dictionary + semantic_layer to the uploads row for downstream features."""
     job_id = await _find_job_id(upload_id)
     if job_id is None:
         raise ValueError(f"No job found for upload_id={upload_id!r}")
     json_str = json.dumps(canvas_response)
     await update_job(job_id, "done", result=json_str)
+    dd = canvas_response.get("data_dictionary")
+    sl = canvas_response.get("semantic_layer")
+    await update_upload_artifacts(
+        upload_id,
+        json.dumps(dd) if dd is not None else None,
+        json.dumps(sl) if sl is not None else None,
+    )
     logger.info("AutoEDA result persisted for upload_id=%s job_id=%s", upload_id, job_id)
 
 
