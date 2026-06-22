@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 # InsightItem — one card/badge on the canvas
@@ -62,7 +62,8 @@ class Dimension(BaseModel):
 class Entity(BaseModel):
     name: str
     description: str
-    key_columns: list[str]
+    # Tolerance: the agent occasionally omits this; default to empty rather than reject.
+    key_columns: list[str] = []
 
 
 class SemanticLayer(BaseModel):
@@ -72,6 +73,16 @@ class SemanticLayer(BaseModel):
     dimensions: list[Dimension]
     time_dimension: str | None = None
     suggested_questions: list[str]
+
+    @field_validator("time_dimension", mode="before")
+    @classmethod
+    def _coerce_time_dimension(cls, v: object) -> object:
+        """Tolerate the agent emitting an object ({name, column, description});
+        reduce it to the column-name string the frontend contract expects."""
+        if isinstance(v, dict):
+            col = v.get("column") or v.get("name")
+            return col if isinstance(col, str) else None
+        return v
 
 
 # ── Progress (streamed agent todos) ──────────────────────────────────────────

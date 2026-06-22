@@ -16,6 +16,7 @@ from uuid import uuid4
 import aiosqlite
 from fastapi import BackgroundTasks, FastAPI, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import ValidationError
 
 from backend.agents.autoeda import run_autoeda_agent
 from backend.database import (
@@ -164,7 +165,12 @@ async def get_job_status(job_id: str) -> JobResponse:
         else:
             if not isinstance(parsed, dict):
                 raise HTTPException(status_code=500, detail="Job result is not a JSON object.")
-            canvas_response = CanvasResponse(**parsed)
+            try:
+                canvas_response = CanvasResponse(**parsed)
+            except ValidationError:
+                # A malformed/legacy row degrades to no-result rather than 500-ing the poll.
+                logger.exception("Stored job result failed CanvasResponse validation job_id=%s", job_id)
+                canvas_response = None
 
     raw_error = row.get("error")
     error_msg: str | None = raw_error if isinstance(raw_error, str) else None
