@@ -157,10 +157,14 @@ async def get_job_status(job_id: str) -> JobResponse:
     if raw_result is not None:
         if not isinstance(raw_result, str):
             raise HTTPException(status_code=500, detail="Invalid job result type.")
-        parsed: object = json.loads(raw_result)
-        if not isinstance(parsed, dict):
-            raise HTTPException(status_code=500, detail="Job result is not a JSON object.")
-        canvas_response = CanvasResponse(**parsed)
+        try:
+            parsed: object = json.loads(raw_result)
+        except json.JSONDecodeError:
+            canvas_response = None
+        else:
+            if not isinstance(parsed, dict):
+                raise HTTPException(status_code=500, detail="Job result is not a JSON object.")
+            canvas_response = CanvasResponse(**parsed)
 
     raw_error = row.get("error")
     error_msg: str | None = raw_error if isinstance(raw_error, str) else None
@@ -168,9 +172,13 @@ async def get_job_status(job_id: str) -> JobResponse:
     raw_progress = row.get("progress")
     progress_items = None
     if isinstance(raw_progress, str) and raw_progress:
-        parsed_progress: object = json.loads(raw_progress)
-        if isinstance(parsed_progress, list):
-            progress_items = parsed_progress
+        try:
+            parsed_progress: object = json.loads(raw_progress)
+        except json.JSONDecodeError:
+            progress_items = None
+        else:
+            if isinstance(parsed_progress, list):
+                progress_items = parsed_progress
 
     return JobResponse(
         job_id=resolved_job_id,

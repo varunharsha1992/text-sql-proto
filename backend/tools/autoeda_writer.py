@@ -63,6 +63,7 @@ def write_autoeda_result(upload_id: str, canvas_response: dict) -> str:
     Returns "ok" on success, error message on failure.
     """
     try:
+        # Safe: LangGraph runs sync tools in a worker thread, so no event loop is running here.
         asyncio.run(persist_autoeda_canvas(upload_id, canvas_response))
     except Exception as exc:
         return f"Error persisting AutoEDA result: {exc}"
