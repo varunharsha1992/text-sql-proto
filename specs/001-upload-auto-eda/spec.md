@@ -18,7 +18,7 @@ A user has a CSV file they want to analyse. They land on the Upload screen, drop
 **Acceptance Scenarios**:
 
 1. **Given** the user is on the Upload screen with no file loaded, **When** they drag and drop a CSV file onto the upload zone, **Then** the system accepts the file, shows file metadata (name, row count, column count, file size), and begins analysis automatically.
-2. **Given** a file has been uploaded and analysis is running, **When** the user waits, **Then** the right canvas shows a loading state, and within 60 seconds transitions to a completed analysis with stat cards, charts, and data quality warnings.
+2. **Given** a file has been uploaded and analysis is running, **When** the user waits, **Then** the right canvas shows a loading state (with a live agent-progress checklist), and within the agent timeout transitions to a completed analysis with stat cards, charts, and data quality warnings.
 3. **Given** the analysis is complete, **When** the user views the canvas, **Then** they see at minimum: total row count, null cell count, duplicate row count, at least one chart, and any columns with >5% null values flagged as warnings.
 4. **Given** the analysis is complete, **When** the user clicks "Continue to Context →", **Then** they are taken to Screen 2 (Context Agent) with their dataset context preserved.
 
