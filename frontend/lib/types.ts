@@ -32,10 +32,76 @@ export interface TableData {
   rows: Array<Array<string | number | null>>;
 }
 
+export type SemanticType =
+  | "identifier"
+  | "categorical"
+  | "numeric"
+  | "temporal"
+  | "currency"
+  | "boolean"
+  | "text";
+
+export interface DataDictionaryEntry {
+  column: string;
+  dtype: string;
+  semantic_type: SemanticType;
+  description: string;
+  sample_values: string[];
+  null_pct: number;
+  unit?: string | null;
+  is_pii: boolean;
+}
+
+export type Aggregation =
+  | "sum"
+  | "avg"
+  | "count"
+  | "count_distinct"
+  | "min"
+  | "max"
+  | "median";
+
+export interface Measure {
+  name: string;
+  column: string;
+  aggregation: Aggregation;
+  description: string;
+}
+
+export interface Dimension {
+  name: string;
+  column: string;
+  description: string;
+}
+
+export interface Entity {
+  name: string;
+  description: string;
+  key_columns: string[];
+}
+
+export interface SemanticLayer {
+  grain: string;
+  entities: Entity[];
+  measures: Measure[];
+  dimensions: Dimension[];
+  time_dimension?: string | null;
+  suggested_questions: string[];
+}
+
+export type ProgressStatus = "pending" | "in_progress" | "completed";
+
+export interface ProgressItem {
+  text: string;
+  status: ProgressStatus;
+}
+
 export interface CanvasResponse {
   insights: InsightItem[];
   charts: ChartSpec[];
   table: TableData | null;
+  data_dictionary?: DataDictionaryEntry[] | null;
+  semantic_layer?: SemanticLayer | null;
 }
 
 export interface UploadResponse {
@@ -51,4 +117,5 @@ export interface JobResponse {
   status: JobStatus;
   result: CanvasResponse | null;
   error: string | null;
+  progress?: ProgressItem[] | null;
 }
