@@ -31,11 +31,62 @@ class TableData(BaseModel):
     rows: list[list[str | int | float | None]]
 
 
+# ── Data dictionary ──────────────────────────────────────────────────────────
+class DataDictionaryEntry(BaseModel):
+    column: str
+    dtype: str
+    semantic_type: Literal[
+        "identifier", "categorical", "numeric", "temporal", "currency", "boolean", "text"
+    ]
+    description: str
+    sample_values: list[str]
+    null_pct: float
+    unit: str | None = None
+    is_pii: bool = False
+
+
+# ── Semantic layer ───────────────────────────────────────────────────────────
+class Measure(BaseModel):
+    name: str
+    column: str
+    aggregation: Literal["sum", "avg", "count", "count_distinct", "min", "max", "median"]
+    description: str
+
+
+class Dimension(BaseModel):
+    name: str
+    column: str
+    description: str
+
+
+class Entity(BaseModel):
+    name: str
+    description: str
+    key_columns: list[str]
+
+
+class SemanticLayer(BaseModel):
+    grain: str
+    entities: list[Entity]
+    measures: list[Measure]
+    dimensions: list[Dimension]
+    time_dimension: str | None = None
+    suggested_questions: list[str]
+
+
+# ── Progress (streamed agent todos) ──────────────────────────────────────────
+class ProgressItem(BaseModel):
+    text: str
+    status: Literal["pending", "in_progress", "completed"]
+
+
 # CanvasResponse — the single output contract for ALL agents
 class CanvasResponse(BaseModel):
     insights: list[InsightItem]
     charts: list[ChartSpec]
     table: TableData | None = None
+    data_dictionary: list[DataDictionaryEntry] | None = None
+    semantic_layer: SemanticLayer | None = None
 
 
 # API response models
@@ -50,3 +101,4 @@ class JobResponse(BaseModel):
     status: Literal["pending", "running", "done", "error"]
     result: CanvasResponse | None = None
     error: str | None = None
+    progress: list[ProgressItem] | None = None
