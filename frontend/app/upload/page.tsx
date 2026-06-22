@@ -50,7 +50,7 @@ export default function UploadPage() {
   const [isUploading, setIsUploading] = useState(false);
 
   const { jobId, setUpload, setEdaDone, clear } = useUploadId();
-  const { status, result, error } = usePolling(jobId);
+  const { status, result, error, progress } = usePolling(jobId);
 
   // Row/column counts come back in the analysis result's stat cards (FR-004).
   const statValue = (label: string): string | null =>
@@ -340,7 +340,7 @@ export default function UploadPage() {
 
       {/* ── Right panel ── */}
       <main className="flex-1 flex flex-col overflow-hidden p-5">
-        <Canvas result={result} status={status} />
+        <Canvas result={result} status={status} progress={progress} />
       </main>
     </div>
   );

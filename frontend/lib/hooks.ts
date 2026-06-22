@@ -116,6 +116,7 @@ interface PollingState {
   status: JobStatus | null;
   result: JobResponse["result"];
   error: string | null;
+  progress: JobResponse["progress"];
 }
 
 export function usePolling(
@@ -127,6 +128,7 @@ export function usePolling(
     status: null,
     result: null,
     error: null,
+    progress: null,
   });
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startedAtRef = useRef<number | null>(null);
@@ -141,7 +143,7 @@ export function usePolling(
   useEffect(() => {
     if (!jobId) {
       // No job to poll (e.g. after a reset) — clear any stale status/error.
-      setState({ status: null, result: null, error: null });
+      setState({ status: null, result: null, error: null, progress: null });
       return;
     }
 
@@ -163,7 +165,12 @@ export function usePolling(
       try {
         const job = await getJobWithRetry(jobId);
         if (cancelled) return;
-        setState({ status: job.status, result: job.result, error: job.error });
+        setState({
+          status: job.status,
+          result: job.result,
+          error: job.error,
+          progress: job.progress ?? null,
+        });
         if (job.status === "done" || job.status === "error") {
           stop();
           return;

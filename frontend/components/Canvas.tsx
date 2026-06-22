@@ -1,6 +1,9 @@
-import type { CanvasResponse, InsightItem, ChartSpec } from "@/lib/types";
+import type { CanvasResponse, InsightItem, ChartSpec, ProgressItem } from "@/lib/types";
 import InsightCard from "@/components/InsightCards";
 import ChartRenderer from "@/components/ChartRenderer";
+import AgentProgress from "@/components/AgentProgress";
+import DataDictionary from "@/components/DataDictionary";
+import SemanticLayer from "@/components/SemanticLayer";
 
 type StatusValue = "pending" | "running" | "done" | "error" | null | undefined;
 
@@ -79,9 +82,10 @@ function LoadingSkeleton() {
 interface CanvasProps {
   result: CanvasResponse | null;
   status?: "pending" | "running" | "done" | "error" | null;
+  progress?: ProgressItem[] | null;
 }
 
-export default function Canvas({ result, status }: CanvasProps) {
+export default function Canvas({ result, status, progress }: CanvasProps) {
   const isLoading = status === "pending" || status === "running";
 
   const stats: InsightItem[] =
@@ -113,7 +117,12 @@ export default function Canvas({ result, status }: CanvasProps) {
       </div>
 
       {/* Body */}
-      {isLoading && <LoadingSkeleton />}
+      {isLoading && (
+        <div className="p-5 space-y-4">
+          {progress && progress.length > 0 && <AgentProgress items={progress} />}
+          <LoadingSkeleton />
+        </div>
+      )}
 
       {!isLoading && result && (
         <div className="p-5 space-y-5">
@@ -152,6 +161,14 @@ export default function Canvas({ result, status }: CanvasProps) {
               ))}
             </div>
           )}
+
+          {/* Data dictionary */}
+          {result.data_dictionary && result.data_dictionary.length > 0 && (
+            <DataDictionary entries={result.data_dictionary} />
+          )}
+
+          {/* Semantic layer */}
+          {result.semantic_layer && <SemanticLayer layer={result.semantic_layer} />}
         </div>
       )}
 
