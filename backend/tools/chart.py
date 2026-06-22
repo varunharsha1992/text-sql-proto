@@ -1,4 +1,4 @@
-"""Tool: generate_chart_spec — validates and returns a standardised ChartSpec dict."""
+"""ChartSpec validation — shared by the generate_chart_spec tool and deterministic AutoEDA."""
 
 from __future__ import annotations
 
@@ -7,18 +7,14 @@ from langchain_core.tools import tool
 _ALLOWED_CHART_TYPES = {"bar", "line", "histogram", "scatter", "heatmap", "boxplot"}
 
 
-@tool
-def generate_chart_spec(
+def build_chart_spec_dict(
     chart_type: str,
     title: str,
     x_label: str,
     y_label: str,
     data: list[dict[str, str | int | float]],
 ) -> dict:
-    """Validates and returns a standardised ChartSpec dict.
-    chart_type must be one of: bar, line, histogram, scatter, heatmap, boxplot.
-    data must be a list of dicts. Returns dict or raises ValueError.
-    """
+    """Return a valid ChartSpec dict, or `{\"error\": ...}` if validation fails."""
     if chart_type not in _ALLOWED_CHART_TYPES:
         return {
             "error": (
@@ -51,3 +47,18 @@ def generate_chart_spec(
         "y_label": y_label,
         "data": data,
     }
+
+
+@tool
+def generate_chart_spec(
+    chart_type: str,
+    title: str,
+    x_label: str,
+    y_label: str,
+    data: list[dict[str, str | int | float]],
+) -> dict:
+    """Validates and returns a standardised ChartSpec dict.
+    chart_type must be one of: bar, line, histogram, scatter, heatmap, boxplot.
+    data must be a list of dicts. Returns dict or {\"error\": ...}.
+    """
+    return build_chart_spec_dict(chart_type, title, x_label, y_label, data)

@@ -39,28 +39,23 @@ async def _find_job_id(upload_id: str) -> str | None:
     return row[0] if row else None
 
 
+async def persist_autoeda_canvas(upload_id: str, canvas_response: dict) -> None:
+    """Write CanvasResponse JSON to the latest job for this upload and mark done."""
+    job_id = await _find_job_id(upload_id)
+    if job_id is None:
+        raise ValueError(f"No job found for upload_id={upload_id!r}")
+    json_str = json.dumps(canvas_response)
+    await update_job(job_id, "done", result=json_str)
+    logger.info("AutoEDA result persisted for upload_id=%s job_id=%s", upload_id, job_id)
+
+
 @tool
 def write_autoeda_result(upload_id: str, canvas_response: dict) -> str:
     """Persists the final CanvasResponse JSON to jobs.result and sets status=done.
     Returns "ok" on success, error message on failure.
     """
     try:
-        job_id = asyncio.run(_find_job_id(upload_id))
+        asyncio.run(persist_autoeda_canvas(upload_id, canvas_response))
     except Exception as exc:
-        return f"Error finding job for upload_id='{upload_id}': {exc}"
-
-    if job_id is None:
-        return f"Error: no job found for upload_id='{upload_id}'."
-
-    try:
-        json_str = json.dumps(canvas_response)
-    except (TypeError, ValueError) as exc:
-        return f"Error serialising canvas_response: {exc}"
-
-    try:
-        asyncio.run(update_job(job_id, "done", result=json_str))
-    except Exception as exc:
-        return f"Error updating job job_id='{job_id}': {exc}"
-
-    logger.info("AutoEDA result persisted for upload_id=%s job_id=%s", upload_id, job_id)
+        return f"Error persisting AutoEDA result: {exc}"
     return "ok"

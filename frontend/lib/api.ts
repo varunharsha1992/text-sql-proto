@@ -1,12 +1,21 @@
 import type { JobResponse, UploadResponse } from "./types";
 
-const API_BASE = "/api";
+/** Same-origin `/api` (Next rewrites) unless NEXT_PUBLIC_API_URL is set to bypass the dev proxy (e.g. http://127.0.0.1:8000). */
+function apiPath(path: string): string {
+  const origin = process.env.NEXT_PUBLIC_API_URL?.trim().replace(/\/$/, "");
+  if (origin) {
+    const p = path.startsWith("/") ? path : `/${path}`;
+    return `${origin}/api${p}`;
+  }
+  const p = path.startsWith("/") ? path : `/${path}`;
+  return `/api${p}`;
+}
 
 export async function uploadFile(file: File): Promise<UploadResponse> {
   const form = new FormData();
   form.append("file", file);
 
-  const res = await fetch(`${API_BASE}/upload`, {
+  const res = await fetch(apiPath("/upload"), {
     method: "POST",
     body: form,
   });
@@ -20,7 +29,7 @@ export async function uploadFile(file: File): Promise<UploadResponse> {
 }
 
 export async function getJob(jobId: string): Promise<JobResponse> {
-  const res = await fetch(`${API_BASE}/jobs/${jobId}`);
+  const res = await fetch(apiPath(`/jobs/${jobId}`));
 
   if (!res.ok) {
     if (res.status === 404) throw new Error("Job not found");

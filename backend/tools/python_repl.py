@@ -1,4 +1,4 @@
-"""Tool: run_python_analysis — sandboxed Python exec against raw_{upload_id} DataFrame."""
+"""Tool: run_python_analysis — sandboxed Python exec against raw_{slug} DataFrame."""
 
 from __future__ import annotations
 
@@ -13,6 +13,8 @@ import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
 from langchain_core.tools import tool
+
+from backend.database import raw_table_name
 
 load_dotenv()
 
@@ -29,10 +31,11 @@ def _sqlite_file_path() -> str:
 
 
 async def _load_dataframe(upload_id: str) -> pd.DataFrame:
+    table = raw_table_name(upload_id)
     path = _sqlite_file_path()
     async with aiosqlite.connect(path) as conn:
         conn.row_factory = aiosqlite.Row
-        async with conn.execute(f"SELECT * FROM raw_{upload_id}") as cursor:
+        async with conn.execute(f"SELECT * FROM {table}") as cursor:
             rows = await cursor.fetchall()
             if not rows:
                 return pd.DataFrame()
@@ -59,16 +62,27 @@ def _has_forbidden_imports(code: str) -> str | None:
 
 
 def _exec_code(df: pd.DataFrame, code: str) -> str:
+    """Never raise SystemExit — it inherits from BaseException and would kill the worker thread."""
     stdout_buffer = io.StringIO()
     exec_globals: dict = {"df": df, "pd": pd, "np": np}
-    with contextlib.redirect_stdout(stdout_buffer):
-        exec(code, exec_globals)  # noqa: S102
+    try:
+        with contextlib.redirect_stdout(stdout_buffer):
+            exec(code, exec_globals)  # noqa: S102
+    except SystemExit as e:
+        return (
+            "Error: exit(), quit(), or raise SystemExit are not allowed in analysis code. "
+            f"(code={e.code!r})"
+        )
+    except KeyboardInterrupt:
+        return "Error: interrupted."
+    except Exception as exc:
+        return f"Error during execution: {exc}"
     return stdout_buffer.getvalue()
 
 
 @tool
 def run_python_analysis(upload_id: str, code: str) -> str:
-    """Executes Python code against the raw_{upload_id} dataframe.
+    """Executes Python code against the raw data table (named raw_{upload_id}).
     Returns stdout output or error message. Never raises.
     Allowed imports: pandas, numpy, scipy.stats, datetime only.
     Timeout: PYTHON_REPL_TIMEOUT_SEC env var (default 30s).
@@ -90,5 +104,6 @@ def run_python_analysis(upload_id: str, code: str) -> str:
             return future.result(timeout=timeout)
         except FuturesTimeoutError:
             return f"Error: execution timed out after {timeout}s."
-        except Exception as exc:
+        except BaseException as exc:
+            # SystemExit should be caught inside _exec_code; this is a safety net
             return f"Error during execution: {exc}"

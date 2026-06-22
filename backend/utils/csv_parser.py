@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
 
-from backend.database import update_upload_counts
+from backend.database import raw_table_name, update_upload_counts
 
 load_dotenv()
 
@@ -207,11 +207,12 @@ def _rows_for_executemany(df: pd.DataFrame) -> list[tuple[object, ...]]:
 
 async def _write_raw_table_and_update_counts(
     upload_id: str,
+    slug: str,
     df: pd.DataFrame,
 ) -> None:
     db_path = _sqlite_file_path()
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-    table = f"raw_{upload_id}"
+    table = raw_table_name(upload_id)
     table_ident = _quote_ident(table)
 
     col_defs: list[str] = []
@@ -231,7 +232,8 @@ async def _write_raw_table_and_update_counts(
     rows = _rows_for_executemany(df)
 
     logger.info(
-        "Writing raw table upload_id=%s path=%s rows=%s cols=%s",
+        "Writing raw table=%s upload_id=%s path=%s rows=%s cols=%s",
+        table,
         upload_id,
         db_path,
         row_count,
@@ -249,11 +251,28 @@ async def _write_raw_table_and_update_counts(
     logger.info("Updated upload counts upload_id=%s", upload_id)
 
 
-def parse_csv_to_sqlite(upload_id: str, file_path: str) -> None:
-    """Read CSV, apply coercion rules, persist to `raw_{upload_id}`, update upload metadata."""
-    logger.info("parse_csv_to_sqlite start upload_id=%s file=%s", upload_id, file_path)
-    df = pd.read_csv(file_path)
+def _read_csv_with_encoding(file_path: str) -> pd.DataFrame:
+    """Try common encodings in order; fall back to latin-1 which never fails."""
+    for enc in ("utf-8-sig", "utf-8", "cp1252", "latin-1"):
+        try:
+            df = pd.read_csv(file_path, encoding=enc)
+            logger.debug("Read CSV with encoding=%s", enc)
+            return df
+        except UnicodeDecodeError:
+            logger.debug("Encoding %s failed, trying next", enc)
+    # latin-1 maps every byte 0x00-0xFF, so this is the guaranteed fallback
+    return pd.read_csv(file_path, encoding="latin-1")
+
+
+def parse_csv_to_sqlite(upload_id: str, slug: str, file_path: str) -> None:
+    """Read CSV, apply coercion rules, persist to `raw_{slug}`, update upload metadata."""
+    logger.info("parse_csv_to_sqlite start upload_id=%s slug=%s file=%s", upload_id, slug, file_path)
+    df = _read_csv_with_encoding(file_path)
     logger.info("Loaded CSV rows=%s cols=%s", len(df), len(df.columns))
     coerced = _apply_coercions(df)
-    asyncio.run(_write_raw_table_and_update_counts(upload_id, coerced))
-    logger.info("parse_csv_to_sqlite complete upload_id=%s", upload_id)
+    asyncio.run(_write_raw_table_and_update_counts(upload_id, slug, coerced))
+    logger.info(
+        "parse_csv_to_sqlite complete upload_id=%s table=%s",
+        upload_id,
+        raw_table_name(upload_id),
+    )

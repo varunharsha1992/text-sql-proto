@@ -49,8 +49,16 @@ export default function UploadPage() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  const { jobId, setUpload, setEdaDone } = useUploadId();
+  const { jobId, setUpload, setEdaDone, clear } = useUploadId();
   const { status, result, error } = usePolling(jobId);
+
+  // Row/column counts come back in the analysis result's stat cards (FR-004).
+  const statValue = (label: string): string | null =>
+    result?.insights.find(
+      (i) => i.type === "stat" && i.label?.toLowerCase() === label
+    )?.value ?? null;
+  const rowsDisplay = statValue("rows") ?? "—";
+  const colsDisplay = statValue("columns") ?? "—";
 
   useEffect(() => {
     if (status === "done") setEdaDone();
@@ -117,8 +125,9 @@ export default function UploadPage() {
     setFile(null);
     setUploadError(null);
     setIsUploading(false);
+    clear(); // drop upload/job ids so polling stops and the errored job is forgotten
     if (fileInputRef.current) fileInputRef.current.value = "";
-  }, []);
+  }, [clear]);
 
   return (
     <div
@@ -186,8 +195,8 @@ export default function UploadPage() {
             </p>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
               {[
-                { label: "Rows", value: "—" },
-                { label: "Columns", value: "—" },
+                { label: "Rows", value: rowsDisplay },
+                { label: "Columns", value: colsDisplay },
                 { label: "Size", value: formatBytes(file.size) },
                 { label: "Encoding", value: "UTF-8" },
               ].map(({ label, value }) => (

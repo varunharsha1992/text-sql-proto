@@ -1,4 +1,4 @@
-"""Tool: get_dataframe_profile — returns shape, dtypes, and stats for a raw_{upload_id} table."""
+"""Tool: get_dataframe_profile — returns shape, dtypes, and stats for a raw_{slug} table."""
 
 from __future__ import annotations
 
@@ -9,6 +9,8 @@ import aiosqlite
 import pandas as pd
 from dotenv import load_dotenv
 from langchain_core.tools import tool
+
+from backend.database import raw_table_name
 
 load_dotenv()
 
@@ -24,10 +26,11 @@ def _sqlite_file_path() -> str:
 
 
 async def _load_dataframe(upload_id: str) -> pd.DataFrame:
+    table = raw_table_name(upload_id)
     path = _sqlite_file_path()
     async with aiosqlite.connect(path) as conn:
         conn.row_factory = aiosqlite.Row
-        async with conn.execute(f"SELECT * FROM raw_{upload_id}") as cursor:
+        async with conn.execute(f"SELECT * FROM {table}") as cursor:
             rows = await cursor.fetchall()
             if not rows:
                 return pd.DataFrame()
@@ -35,9 +38,15 @@ async def _load_dataframe(upload_id: str) -> pd.DataFrame:
     return pd.DataFrame([dict(row) for row in rows], columns=columns)
 
 
+def load_upload_dataframe_sync(upload_id: str) -> pd.DataFrame:
+    """Load `raw_{slug}` for this upload (blocking). Used by deterministic AutoEDA."""
+    return asyncio.run(_load_dataframe(upload_id))
+
+
 @tool
 def get_dataframe_profile(upload_id: str) -> dict:
-    """Returns shape, dtypes, null counts, nunique, describe stats for raw_{upload_id} SQLite table.
+    """Returns shape, dtypes, null counts, nunique, describe stats for the raw data table.
+    The table is named raw_{upload_id} (non-alphanumeric chars stripped).
     Called once at the start of AutoEDA. Returns a dict with keys:
     shape (rows, cols), columns (list of name/dtype/null_count/nunique/stats dicts).
     """

@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 
 UPLOAD_DIR = os.getenv("UPLOAD_DIR", "./data/uploads")
 MAX_FILE_SIZE_MB = int(os.getenv("MAX_FILE_SIZE_MB", "50"))
+AGENT_TIMEOUT_SEC = int(os.getenv("AGENT_TIMEOUT_SEC", "300"))  # 5 min hard cap
 
 
 def generate_slug(filename: str) -> str:
@@ -66,21 +67,27 @@ app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-async def run_autoeda_pipeline(upload_id: str, job_id: str) -> None:
+async def run_autoeda_pipeline(upload_id: str, job_id: str, slug: str) -> None:
     """Background task: parse CSV → run AutoEDA agent."""
     file_path = str(Path(UPLOAD_DIR) / f"{upload_id}.csv")
     try:
         await update_job(job_id, "running")
         loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, parse_csv_to_sqlite, upload_id, file_path)
-        await run_autoeda_agent(upload_id)
-    except Exception as exc:
+        await loop.run_in_executor(None, parse_csv_to_sqlite, upload_id, slug, file_path)
+        await asyncio.wait_for(run_autoeda_agent(upload_id), timeout=AGENT_TIMEOUT_SEC)
+    except asyncio.CancelledError:
+        raise
+    except BaseException as exc:
+        # BaseException catches asyncio.TimeoutError and anything that escapes the agent/tools
         logger.exception(
             "AutoEDA pipeline failed for upload_id=%s job_id=%s",
             upload_id,
@@ -116,7 +123,7 @@ async def upload_csv(file: UploadFile, background_tasks: BackgroundTasks) -> Upl
 
     await create_upload(upload_id, filename or "upload.csv", slug, file_path)
     await create_job(job_id, "autoeda", upload_id)
-    background_tasks.add_task(run_autoeda_pipeline, upload_id, job_id)
+    background_tasks.add_task(run_autoeda_pipeline, upload_id, job_id, slug)
 
     return UploadResponse(upload_id=upload_id, job_id=job_id, slug=slug)
 

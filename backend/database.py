@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from pathlib import Path
 
 import aiosqlite
@@ -15,6 +16,16 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_DATABASE_URL = "sqlite+aiosqlite:///./data/app.db"
 _SQLITE_AI_PREFIX = "sqlite+aiosqlite:///"
+
+
+def raw_table_name(upload_id: str) -> str:
+    """Per-upload raw data table name, derived from the unique upload_id.
+
+    Uses upload_id (not the filename-derived slug) so two uploads with the same
+    filename never collide on the same table. Non-alphanumeric chars (e.g. the
+    UUID hyphens) are stripped so the result is a safe SQLite identifier.
+    """
+    return "raw_" + re.sub(r"[^0-9a-zA-Z]", "", upload_id)
 
 
 def _sqlite_file_path() -> str:

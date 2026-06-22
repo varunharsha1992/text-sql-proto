@@ -11,6 +11,21 @@ import {
 import type { JobResponse, JobStatus } from "./types";
 import { getJob } from "./api";
 
+async function getJobWithRetry(jobId: string, maxAttempts = 5): Promise<JobResponse> {
+  let last: Error = new Error("Job fetch failed");
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      return await getJob(jobId);
+    } catch (e) {
+      last = e instanceof Error ? e : new Error(String(e));
+      if (attempt < maxAttempts - 1) {
+        await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
+      }
+    }
+  }
+  throw last;
+}
+
 // ─── Upload ID context ──────────────────────────────────────────────────────
 
 interface UploadState {
@@ -105,7 +120,8 @@ interface PollingState {
 
 export function usePolling(
   jobId: string | null,
-  intervalMs = 2000
+  intervalMs = 2000,
+  maxDurationMs = 360_000  // 6 min — matches backend AGENT_TIMEOUT_SEC + buffer
 ): PollingState {
   const [state, setState] = useState<PollingState>({
     status: null,
@@ -113,6 +129,7 @@ export function usePolling(
     error: null,
   });
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startedAtRef = useRef<number | null>(null);
 
   const stop = useCallback(() => {
     if (timerRef.current) {
@@ -122,13 +139,29 @@ export function usePolling(
   }, []);
 
   useEffect(() => {
-    if (!jobId) return;
+    if (!jobId) {
+      // No job to poll (e.g. after a reset) — clear any stale status/error.
+      setState({ status: null, result: null, error: null });
+      return;
+    }
 
     let cancelled = false;
+    startedAtRef.current = Date.now();
 
     const poll = async () => {
+      // Hard stop: treat as error if we've been polling longer than maxDurationMs
+      if (startedAtRef.current && Date.now() - startedAtRef.current > maxDurationMs) {
+        setState((prev) => ({
+          ...prev,
+          status: "error",
+          error: "Analysis timed out. Please try again.",
+        }));
+        stop();
+        return;
+      }
+
       try {
-        const job = await getJob(jobId);
+        const job = await getJobWithRetry(jobId);
         if (cancelled) return;
         setState({ status: job.status, result: job.result, error: job.error });
         if (job.status === "done" || job.status === "error") {
@@ -153,7 +186,7 @@ export function usePolling(
       cancelled = true;
       stop();
     };
-  }, [jobId, intervalMs, stop]);
+  }, [jobId, intervalMs, maxDurationMs, stop]);
 
   return state;
 }
