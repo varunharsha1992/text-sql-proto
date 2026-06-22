@@ -69,6 +69,18 @@ async def create_tables(db: aiosqlite.Connection) -> None:
         );
         """
     )
+    # Idempotent column migrations for existing databases.
+    _migrations = [
+        "ALTER TABLE uploads ADD COLUMN data_dictionary TEXT",
+        "ALTER TABLE uploads ADD COLUMN semantic_layer TEXT",
+        "ALTER TABLE jobs ADD COLUMN progress TEXT",
+    ]
+    for stmt in _migrations:
+        try:
+            await db.execute(stmt)
+        except Exception as exc:  # noqa: BLE001 - "duplicate column name" is expected on re-run
+            if "duplicate column name" not in str(exc).lower():
+                raise
     await db.commit()
     logger.info("Ensured database tables: uploads, jobs")
 
@@ -149,10 +161,46 @@ async def update_job(
         await db.close()
 
 
+async def update_job_progress(job_id: str, progress_json: str) -> None:
+    db = await get_db()
+    try:
+        await db.execute(
+            "UPDATE jobs SET progress = ?, updated_at = CURRENT_TIMESTAMP WHERE job_id = ?",
+            (progress_json, job_id),
+        )
+        await db.commit()
+    finally:
+        await db.close()
+
+
+async def update_upload_artifacts(
+    upload_id: str,
+    data_dictionary: str,
+    semantic_layer: str,
+) -> None:
+    db = await get_db()
+    try:
+        await db.execute(
+            "UPDATE uploads SET data_dictionary = ?, semantic_layer = ? WHERE id = ?",
+            (data_dictionary, semantic_layer, upload_id),
+        )
+        await db.commit()
+    finally:
+        await db.close()
+
+
 async def get_job(job_id: str) -> dict | None:
     db = await get_db()
     try:
-        async with db.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)) as cursor:
+        async with db.execute(
+            """
+            SELECT j.*, u.data_dictionary AS data_dictionary, u.semantic_layer AS semantic_layer
+            FROM jobs j
+            LEFT JOIN uploads u ON u.id = j.upload_id
+            WHERE j.job_id = ?
+            """,
+            (job_id,),
+        ) as cursor:
             row = await cursor.fetchone()
         if row is None:
             return None
