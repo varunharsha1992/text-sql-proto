@@ -87,7 +87,7 @@ The canvas automatically selects appropriate chart types for each column based o
 - **FR-011**: System MUST enable the "Continue to Context →" navigation button only after analysis has fully completed.
 - **FR-012**: System MUST persist the upload identifier across screens so that subsequent screens (Context Agent, Query Canvas) can reference the same dataset.
 - **FR-013**: System MUST show an error state on the canvas if analysis fails, with an option to retry.
-- **FR-014**: System MUST complete analysis and display results within 60 seconds of file upload for a dataset up to 50MB.
+- **FR-014**: System MUST complete analysis and display results within the agent timeout (default 240 seconds, configurable via `AGENT_TIMEOUT_SEC`) of file upload for a dataset up to 50MB; on timeout the deterministic fallback result is shown.
 
 ### Key Entities
 
@@ -102,7 +102,7 @@ The canvas automatically selects appropriate chart types for each column based o
 
 ### Measurable Outcomes
 
-- **SC-001**: Users can drop a CSV file and see analysis results appear on the canvas within 60 seconds, with no configuration required.
+- **SC-001**: Users can drop a CSV file and see analysis results appear on the canvas within the agent timeout (default 240s), with no configuration required.
 - **SC-002**: 100% of columns with more than 5% null values are surfaced as warnings in the analysis output.
 - **SC-003**: At least 2 charts are generated for any dataset with more than 2 columns, selected automatically based on data characteristics.
 - **SC-004**: The "Continue to Context" button is reliably disabled until analysis completes — users cannot proceed to the next screen with an incomplete analysis.
@@ -118,6 +118,6 @@ The canvas automatically selects appropriate chart types for each column based o
 - The application is single-user and runs locally — no concurrent upload handling or user session management is required.
 - The demo dataset (messy e-commerce orders CSV) is the primary validation target. The feature must produce meaningful output for this dataset specifically.
 - File storage is local disk. Cloud storage (S3/GCS) is not required for this version.
-- The analysis agent has access to an LLM API (OpenAI GPT-4o). If the API is unavailable, the job will fail with an error — no fallback analysis mode is provided.
+- The analysis agent runs on DeepSeek V4 Flash via OpenRouter (model id configurable via `OPENROUTER_MODEL`), orchestrated with LangChain `deepagents`. If the LLM is unavailable or the agent fails/times out, the system falls back to a deterministic analysis (stats, quality warnings, charts) so the user always receives a result — only the data dictionary, semantic layer, and agent narrative are omitted in that case.
 - The type normalisation step (currency stripping, date format unification) is applied silently and does not require user confirmation or review.
 - The right-hand canvas is shared infrastructure used across all screens. Its rendering behaviour (stat cards, charts, warnings) is defined by the Canvas component specification.
