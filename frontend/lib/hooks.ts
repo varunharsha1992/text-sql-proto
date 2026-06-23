@@ -301,7 +301,10 @@ export function useChatTurn(): {
         setCatalog(schema.catalog);
         setSemanticLayer(schema.semantic_layer ?? null);
       } catch (e) {
+        // Don't fire the opening turn against an unknown schema, and don't let runTurn's
+        // setError(null) wipe this error — surface it and stop here.
         setError(e instanceof Error ? e.message : "Failed to load schema");
+        return;
       }
       await runTurn("__INIT__", false);
     })();

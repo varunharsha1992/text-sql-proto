@@ -30,7 +30,7 @@ export default function CatalogTable({ rows }: { rows: CatalogRow[] }) {
               </thead>
               <tbody>
                 {cols.map((c) => (
-                  <tr key={c.column_name} style={{ borderTop: "1px solid var(--border)" }}>
+                  <tr key={`${c.upload_id}:${c.column_name}`} style={{ borderTop: "1px solid var(--border)" }}>
                     <td className="px-2 py-1" style={{ fontFamily: "'DM Mono', monospace", color: "var(--text)" }}>
                       {c.column_name}
                       {c.is_pii && (

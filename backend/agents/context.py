@@ -84,27 +84,7 @@ def _to_lc(history: list[dict]) -> list:
     return out
 
 
-async def run_context_turn(message: str) -> dict:
-    """Run one interview turn. Persists messages; returns chat + full catalog + semantic layer."""
-    await ensure_schema_seed()
-    lc = _to_lc(await get_conversation())
-    if message == "__INIT__":
-        lc.append(HumanMessage(
-            "Begin the interview. Use get_schema_overview, then greet me and ask your first "
-            "(at most 2) questions about the most ambiguous columns or relationships."
-        ))
-    else:
-        lc.append(HumanMessage(message))
-
-    agent = build_context_agent()
-    result = await agent.ainvoke({"messages": lc})
-    last = result["messages"][-1]
-    reply = last.content if isinstance(last.content, str) else str(last.content)
-
-    if message != "__INIT__":
-        await save_message("user", message)
-    await save_message("agent", reply)
-
+async def _turn_state(reply: str) -> dict:
     sl_raw = await get_schema_semantic_layer()
     return {
         "chat": reply,
@@ -112,3 +92,38 @@ async def run_context_turn(message: str) -> dict:
         "semantic_layer": json.loads(sl_raw) if sl_raw else None,
         "complete": bool((await get_schema_meta()).get("context_complete")),
     }
+
+
+async def run_context_turn(message: str) -> dict:
+    """Run one interview turn. Persists messages; returns chat + full catalog + semantic layer.
+
+    The user message is persisted BEFORE calling the model so it is never lost if the model
+    call fails, and a failed model call degrades to a friendly chat message instead of a 500."""
+    await ensure_schema_seed()
+    is_init = message == "__INIT__"
+
+    # Persist the user's turn first; _to_lc then already includes it in history.
+    if not is_init:
+        await save_message("user", message)
+
+    lc = _to_lc(await get_conversation())
+    if is_init:
+        lc.append(HumanMessage(
+            "Begin the interview. Use get_schema_overview, then greet me and ask your first "
+            "(at most 2) questions about the most ambiguous columns or relationships."
+        ))
+
+    agent = build_context_agent()
+    try:
+        result = await agent.ainvoke({"messages": lc})
+        last = result["messages"][-1]
+        reply = last.content if isinstance(last.content, str) else str(last.content)
+    except Exception:  # noqa: BLE001
+        logger.exception("Context agent turn failed")
+        reply = ("Sorry — I couldn't reach the analysis model just now. Your message was saved; "
+                 "please try again in a moment.")
+        await save_message("agent", reply)
+        return await _turn_state(reply)
+
+    await save_message("agent", reply)
+    return await _turn_state(reply)

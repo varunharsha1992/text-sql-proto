@@ -76,8 +76,14 @@ export default function ChatPanel({
         </button>
         <button
           onClick={onMarkComplete}
+          disabled={loading || complete}
           className="rounded-lg px-3 py-2 text-[13px] font-medium"
-          style={{ background: "var(--accent)", color: "#000" }}
+          style={{
+            background: "var(--accent)",
+            color: "#000",
+            opacity: loading || complete ? 0.5 : 1,
+            cursor: loading || complete ? "not-allowed" : "pointer",
+          }}
         >
           ✓ Mark Complete
         </button>

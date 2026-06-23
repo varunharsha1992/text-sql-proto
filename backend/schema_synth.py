@@ -12,14 +12,17 @@ import json
 import logging
 
 import pandas as pd
+from pydantic import ValidationError
 
 from backend.database import (
     catalog_count,
+    get_schema_semantic_layer,
     get_upload,
     list_uploads,
     set_schema_semantic_layer,
     upsert_catalog_entry,
 )
+from backend.models import SchemaSemanticLayer
 from backend.tools.dataframe import _load_dataframe
 
 logger = logging.getLogger(__name__)
@@ -101,10 +104,36 @@ def detect_relationships() -> list[dict]:
     return rels
 
 
+def _validated_layer_json(candidate: dict, tables_meta: list[dict], suggested: list[str]) -> str:
+    """Return JSON for the best schema layer that validates against SchemaSemanticLayer.
+
+    Degrades gracefully so a single bad LLM-produced measure/dimension can never make the
+    whole layer unstorable (which would make GET /context/schema return semantic_layer: null
+    even though good data exists). Tries the full candidate, then drops the optional lists,
+    then falls back to an empty-but-valid layer."""
+    fallbacks = (
+        candidate,
+        {"tables": tables_meta, "relationships": [], "measures": [],
+         "dimensions": [], "suggested_questions": suggested[:8]},
+        {"tables": [], "relationships": [], "measures": [],
+         "dimensions": [], "suggested_questions": []},
+    )
+    for attempt in fallbacks:
+        try:
+            return json.dumps(SchemaSemanticLayer(**attempt).model_dump())
+        except ValidationError:
+            logger.exception("Schema seed layer failed validation; degrading")
+    # The all-empty layer above is guaranteed valid, so this is unreachable in practice.
+    return json.dumps({"tables": [], "relationships": [], "measures": [],
+                       "dimensions": [], "suggested_questions": []})
+
+
 async def ensure_schema_seed() -> None:
-    """Idempotent: if the catalog is empty, seed it from every table's data_dictionary
-    and build the first-draft schema semantic layer (tables + heuristic relationships)."""
-    if await catalog_count() > 0:
+    """Idempotent: seed the catalog from every table's data_dictionary and build the
+    first-draft schema semantic layer. Safe to re-run — catalog upserts are idempotent,
+    and a prior run that crashed mid-way (or never stored a layer) is completed on the
+    next call. The guard only short-circuits once a seed has FULLY completed."""
+    if await catalog_count() > 0 and await get_schema_semantic_layer():
         return
 
     uploads = await list_uploads()
@@ -114,59 +143,71 @@ async def ensure_schema_seed() -> None:
     suggested: list[str] = []
 
     for u in uploads:
-        upload = await get_upload(u["id"])
-        if upload is None:
-            continue
-        slug = upload["slug"]
-        dd_raw = upload.get("data_dictionary")
-        sl_raw = upload.get("semantic_layer")
-        entries = json.loads(dd_raw) if isinstance(dd_raw, str) and dd_raw else []
-        per_table_sl = json.loads(sl_raw) if isinstance(sl_raw, str) and sl_raw else {}
-
-        # Seed catalog rows from this table's data dictionary.
-        for e in entries:
-            col = e.get("column")
-            if not col:
+        # A malformed dictionary/semantic-layer JSON for one table must not abort the whole
+        # seed (which, before, left every remaining table permanently uncatalogued).
+        try:
+            upload = await get_upload(u["id"])
+            if upload is None:
                 continue
-            await upsert_catalog_entry(u["id"], slug, col, {
-                "data_type": e.get("dtype"),
-                "semantic_role": _SEMANTIC_ROLE.get(e.get("semantic_type", ""), "dimension"),
-                "description": e.get("description"),
-                "sample_values": e.get("sample_values") or [],
-                "is_pii": bool(e.get("is_pii", False)),
-                "unit": e.get("unit"),
-                "null_pct": e.get("null_pct"),
-            })
+            slug = upload["slug"]
+            dd_raw = upload.get("data_dictionary")
+            sl_raw = upload.get("semantic_layer")
+            entries = json.loads(dd_raw) if isinstance(dd_raw, str) and dd_raw else []
+            per_table_sl = json.loads(sl_raw) if isinstance(sl_raw, str) and sl_raw else {}
 
-        tables_meta.append({
-            "name": slug,
-            "grain": str(per_table_sl.get("grain") or ""),
-            "description": "",
-        })
-        for m in per_table_sl.get("measures", []) or []:
-            measures.append({
-                "name": m.get("name", ""), "table": slug,
-                "column": m.get("column", ""),
-                "aggregation": m.get("aggregation", "sum"),
-                "description": m.get("description", ""),
-            })
-        for dim in per_table_sl.get("dimensions", []) or []:
-            dimensions.append({
-                "name": dim.get("name", ""), "table": slug,
-                "column": dim.get("column", ""),
-                "description": dim.get("description", ""),
-            })
-        for q in per_table_sl.get("suggested_questions", []) or []:
-            if q not in suggested:
-                suggested.append(q)
+            # Seed catalog rows from this table's data dictionary.
+            for e in entries:
+                col = e.get("column")
+                if not col:
+                    continue
+                await upsert_catalog_entry(u["id"], slug, col, {
+                    "data_type": e.get("dtype"),
+                    "semantic_role": _SEMANTIC_ROLE.get(e.get("semantic_type", ""), "dimension"),
+                    "description": e.get("description"),
+                    "sample_values": e.get("sample_values") or [],
+                    "is_pii": bool(e.get("is_pii", False)),
+                    "unit": e.get("unit"),
+                    "null_pct": e.get("null_pct"),
+                })
 
-    semantic_layer = {
+            tables_meta.append({
+                "name": slug,
+                "grain": str(per_table_sl.get("grain") or ""),
+                "description": "",
+            })
+            for m in per_table_sl.get("measures", []) or []:
+                measures.append({
+                    "name": m.get("name", ""), "table": slug,
+                    "column": m.get("column", ""),
+                    "aggregation": m.get("aggregation", "sum"),
+                    "description": m.get("description", ""),
+                })
+            for dim in per_table_sl.get("dimensions", []) or []:
+                dimensions.append({
+                    "name": dim.get("name", ""), "table": slug,
+                    "column": dim.get("column", ""),
+                    "description": dim.get("description", ""),
+                })
+            for q in per_table_sl.get("suggested_questions", []) or []:
+                if q not in suggested:
+                    suggested.append(q)
+        except Exception:  # noqa: BLE001
+            logger.exception("Skipping table %s during schema seed", u.get("id"))
+            continue
+
+    try:
+        relationships = detect_relationships()
+    except Exception:  # noqa: BLE001
+        logger.exception("Relationship detection failed during seed; continuing without")
+        relationships = []
+
+    candidate = {
         "tables": tables_meta,
-        "relationships": detect_relationships(),
+        "relationships": relationships,
         "measures": measures,
         "dimensions": dimensions,
         "suggested_questions": suggested[:8],
     }
-    await set_schema_semantic_layer(json.dumps(semantic_layer))
+    await set_schema_semantic_layer(_validated_layer_json(candidate, tables_meta, suggested))
     logger.info("Seeded schema: %s tables, %s relationships",
-                len(tables_meta), len(semantic_layer["relationships"]))
+                len(tables_meta), len(relationships))
