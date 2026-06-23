@@ -7,11 +7,6 @@ import { useUploadId, useUploads, usePolling } from "@/lib/hooks";
 import Canvas from "@/components/Canvas";
 import TableList from "@/components/TableList";
 
-function formatBytes(bytes: number): string {
-  if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(1)} MB`;
-  if (bytes >= 1_024) return `${(bytes / 1_024).toFixed(0)} KB`;
-  return `${bytes} B`;
-}
 
 export default function UploadPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -48,13 +43,25 @@ export default function UploadPage() {
       setUploadError(null);
       setIsUploading(true);
       try {
-        for (const f of Array.from(files)) {
-          await uploadFile(f);
+        const results = await Promise.allSettled(
+          Array.from(files).map((f) => uploadFile(f))
+        );
+        const failed = results.filter(
+          (r): r is PromiseRejectedResult => r.status === "rejected"
+        );
+        if (failed.length > 0) {
+          const firstMsg =
+            failed[0].reason instanceof Error
+              ? failed[0].reason.message
+              : String(failed[0].reason);
+          setUploadError(
+            `${failed.length} of ${files.length} files failed to upload: ${firstMsg}`
+          );
+        } else {
+          setUploadError(null);
         }
-        refetch();
-      } catch (e) {
-        setUploadError(e instanceof Error ? e.message : "Upload failed");
       } finally {
+        refetch();
         setIsUploading(false);
       }
     },
