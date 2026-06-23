@@ -8,8 +8,8 @@ import {
   useRef,
   useState,
 } from "react";
-import type { JobResponse, JobStatus } from "./types";
-import { getJob } from "./api";
+import type { JobResponse, JobStatus, UploadSummary } from "./types";
+import { getJob, listUploads } from "./api";
 
 async function getJobWithRetry(jobId: string, maxAttempts = 5): Promise<JobResponse> {
   let last: Error = new Error("Job fetch failed");
@@ -196,4 +196,49 @@ export function usePolling(
   }, [jobId, intervalMs, maxDurationMs, stop]);
 
   return state;
+}
+
+// ─── Uploads list (the global schema's tables) ───────────────────────────────
+
+export function useUploads(intervalMs = 2000): {
+  uploads: UploadSummary[];
+  loading: boolean;
+  refetch: () => void;
+} {
+  const [uploads, setUploads] = useState<UploadSummary[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [tick, setTick] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const refetch = useCallback(() => setTick((t) => t + 1), []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const poll = async () => {
+      try {
+        const res = await listUploads();
+        if (cancelled) return;
+        setUploads(res.uploads);
+        setLoading(false);
+        const anyInFlight = res.uploads.some(
+          (u) => u.status === "pending" || u.status === "running"
+        );
+        if (anyInFlight) {
+          timerRef.current = setTimeout(poll, intervalMs);
+        }
+      } catch {
+        if (cancelled) return;
+        setLoading(false);
+      }
+    };
+
+    poll();
+    return () => {
+      cancelled = true;
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [intervalMs, tick]);
+
+  return { uploads, loading, refetch };
 }

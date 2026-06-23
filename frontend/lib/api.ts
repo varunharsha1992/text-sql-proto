@@ -1,4 +1,4 @@
-import type { JobResponse, UploadResponse } from "./types";
+import type { JobResponse, UploadResponse, UploadsListResponse } from "./types";
 
 /** Same-origin `/api` (Next rewrites) unless NEXT_PUBLIC_API_URL is set to bypass the dev proxy (e.g. http://127.0.0.1:8000). */
 function apiPath(path: string): string {
@@ -38,4 +38,13 @@ export async function getJob(jobId: string): Promise<JobResponse> {
   }
 
   return res.json() as Promise<JobResponse>;
+}
+
+export async function listUploads(): Promise<UploadsListResponse> {
+  const res = await fetch(apiPath("/uploads"));
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail ?? "Failed to list uploads");
+  }
+  return res.json() as Promise<UploadsListResponse>;
 }

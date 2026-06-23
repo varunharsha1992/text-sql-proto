@@ -110,6 +110,20 @@ export interface UploadResponse {
   slug: string;
 }
 
+export interface UploadSummary {
+  upload_id: string;
+  slug: string;
+  filename: string;
+  row_count?: number | null;
+  col_count?: number | null;
+  job_id?: string | null;
+  status?: JobStatus | null;
+}
+
+export interface UploadsListResponse {
+  uploads: UploadSummary[];
+}
+
 export type JobStatus = "pending" | "running" | "done" | "error";
 
 export interface JobResponse {
