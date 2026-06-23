@@ -20,13 +20,16 @@ from pydantic import ValidationError
 
 from backend.agents.autoeda import run_autoeda_agent
 from backend.agents.context import run_context_turn
+from backend.agents.query import run_query_turn
 from backend.database import (
+    any_upload_done,
     create_job,
     create_tables,
     create_upload,
     get_catalog,
     get_db,
     get_job,
+    get_query_history,
     get_schema_semantic_layer,
     list_uploads,
     mark_schema_context_complete,
@@ -41,6 +44,10 @@ from backend.models import (
     ContextChatRequest,
     ContextChatResponse,
     JobResponse,
+    QueryChatRequest,
+    QueryChatResponse,
+    QueryHistoryResponse,
+    QueryTurn,
     SchemaResponse,
     SchemaSemanticLayer,
     UploadResponse,
@@ -308,3 +315,50 @@ async def context_chat(req: ContextChatRequest) -> ContextChatResponse:
 async def context_complete() -> dict:
     await mark_schema_context_complete()
     return {"ok": True}
+
+
+def _history_to_turns(rows: list[dict]) -> list[QueryTurn]:
+    turns: list[QueryTurn] = []
+    for r in rows:
+        try:
+            canvas = json.loads(r["canvas_json"])
+            turns.append(
+                QueryTurn(
+                    user_query=r["user_query"],
+                    route=r["route"],
+                    route_reason=r.get("route_reason"),
+                    sql_query=r.get("sql_query"),
+                    chat=r["chat_response"],
+                    canvas=CanvasResponse(**canvas),
+                )
+            )
+        except (json.JSONDecodeError, ValidationError):
+            logger.exception("Skipping invalid query_history row id=%s", r.get("id"))
+    return turns
+
+
+@app.post("/api/query/chat", response_model=QueryChatResponse)
+async def query_chat(req: QueryChatRequest) -> QueryChatResponse:
+    if not await any_upload_done():
+        raise HTTPException(status_code=400, detail="Upload CSVs and wait for AutoEDA first.")
+    try:
+        turn = await run_query_turn(req.message)
+    except Exception:  # noqa: BLE001
+        logger.exception("Query chat route failed")
+        raise HTTPException(
+            status_code=500,
+            detail="Query failed — please try again in a moment.",
+        ) from None
+    return QueryChatResponse(
+        chat=turn["chat"],
+        canvas=CanvasResponse(**turn["canvas"]) if isinstance(turn["canvas"], dict) else turn["canvas"],
+        route=turn["route"],
+        route_reason=turn["route_reason"],
+        sql_query=turn.get("sql_query"),
+    )
+
+
+@app.get("/api/query/history", response_model=QueryHistoryResponse)
+async def query_history() -> QueryHistoryResponse:
+    rows = await get_query_history()
+    return QueryHistoryResponse(turns=_history_to_turns(rows))

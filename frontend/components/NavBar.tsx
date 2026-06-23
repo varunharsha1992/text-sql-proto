@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useUploadId } from "@/lib/hooks";
 import { usePathname } from "next/navigation";
 
@@ -9,7 +10,7 @@ const STEPS = [
   { label: "Query Canvas", path: "/query" },
 ];
 
-type StepState = "active" | "done" | "locked";
+type StepState = "active" | "done" | "available" | "locked";
 
 function getStepState(
   stepIndex: number,
@@ -18,11 +19,8 @@ function getStepState(
 ): StepState {
   if (stepIndex === activeIndex) return "active";
   if (stepIndex < activeIndex) return "done";
-  // Step 2 (context) unlocks only after EDA is done
-  if (stepIndex === 1 && !edaDone) return "locked";
-  // Step 3 (query) is always locked for now (requires context complete)
-  if (stepIndex === 2) return "locked";
-  return "locked";
+  if (!edaDone) return "locked";
+  return "available";
 }
 
 export default function NavBar() {
@@ -39,7 +37,6 @@ export default function NavBar() {
         borderBottom: "1px solid var(--border)",
       }}
     >
-      {/* Brand */}
       <span
         className="text-[16px] font-semibold mr-8 tracking-tight"
         style={{
@@ -50,59 +47,61 @@ export default function NavBar() {
         DataLens
       </span>
 
-      {/* Steps */}
       <div className="flex items-stretch gap-0">
         {STEPS.map((step, i) => {
           const state = getStepState(i, activeIndex, edaDone);
           const isLast = i === STEPS.length - 1;
 
-          return (
-            <div key={step.path} className="flex items-stretch">
-              <div
-                className="flex items-center gap-1.5 px-4 text-[12px] transition-colors whitespace-nowrap"
+          const inner = (
+            <div
+              className="flex items-center gap-1.5 px-4 text-[12px] transition-colors whitespace-nowrap"
+              style={{
+                color:
+                  state === "active"
+                    ? "var(--text)"
+                    : state === "done" || state === "available"
+                    ? "var(--text2)"
+                    : "var(--text3)",
+                opacity: state === "locked" ? 0.35 : 1,
+                cursor: state === "locked" ? "not-allowed" : "pointer",
+                borderBottom:
+                  state === "active"
+                    ? "2px solid var(--accent)"
+                    : "2px solid transparent",
+                paddingBottom: "2px",
+              }}
+            >
+              <span
+                className="w-[18px] h-[18px] rounded-full flex items-center justify-center text-[9px] shrink-0"
                 style={{
+                  fontFamily: "'DM Mono', monospace",
+                  border:
+                    state === "active"
+                      ? "1px solid var(--accent)"
+                      : "1px solid var(--border2)",
+                  background:
+                    state === "active"
+                      ? "var(--accent)"
+                      : state === "done"
+                      ? "rgba(110,231,183,0.15)"
+                      : "transparent",
                   color:
                     state === "active"
-                      ? "var(--text)"
+                      ? "#000"
                       : state === "done"
-                      ? "var(--text2)"
+                      ? "var(--accent)"
                       : "var(--text3)",
-                  opacity: state === "locked" ? 0.35 : 1,
-                  cursor: state === "locked" ? "not-allowed" : "default",
-                  borderBottom:
-                    state === "active"
-                      ? "2px solid var(--accent)"
-                      : "2px solid transparent",
-                  paddingBottom: "2px",
                 }}
               >
-                {/* Step number / checkmark */}
-                <span
-                  className="w-[18px] h-[18px] rounded-full flex items-center justify-center text-[9px] shrink-0"
-                  style={{
-                    fontFamily: "'DM Mono', monospace",
-                    border:
-                      state === "active"
-                        ? "1px solid var(--accent)"
-                        : "1px solid var(--border2)",
-                    background:
-                      state === "active"
-                        ? "var(--accent)"
-                        : state === "done"
-                        ? "rgba(110,231,183,0.15)"
-                        : "transparent",
-                    color:
-                      state === "active"
-                        ? "#000"
-                        : state === "done"
-                        ? "var(--accent)"
-                        : "var(--text3)",
-                  }}
-                >
-                  {state === "done" ? "✓" : i + 1}
-                </span>
-                {step.label}
-              </div>
+                {state === "done" ? "✓" : i + 1}
+              </span>
+              {step.label}
+            </div>
+          );
+
+          return (
+            <div key={step.path} className="flex items-stretch">
+              {state === "locked" ? inner : <Link href={step.path}>{inner}</Link>}
               {!isLast && (
                 <span
                   className="text-[10px] px-0.5 flex items-center"

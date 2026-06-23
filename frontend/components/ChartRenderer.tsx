@@ -19,6 +19,23 @@ interface ChartRendererProps {
   spec: ChartSpec;
 }
 
+/** Map label/value (and similar LLM aliases) to x/y for Recharts. */
+function normalizeChartData(
+  data: Array<Record<string, string | number>>
+): Array<Record<string, string | number>> {
+  return data.map((item) => {
+    if ("x" in item && "y" in item) return item;
+    const x = item.label ?? item.name ?? item.category;
+    const y = item.value;
+    if (x !== undefined && y !== undefined) return { x, y };
+    return item;
+  });
+}
+
+function chartSpecForRender(spec: ChartSpec): ChartSpec {
+  return { ...spec, data: normalizeChartData(spec.data) };
+}
+
 const tooltipStyle = {
   background: "var(--bg4)",
   border: "1px solid var(--border)",
@@ -206,19 +223,20 @@ function renderChart(spec: ChartSpec) {
 }
 
 export default function ChartRenderer({ spec }: ChartRendererProps) {
+  const normalized = chartSpecForRender(spec);
   return (
     <div
       className="bg-[var(--bg3)] border border-[var(--border)] rounded-lg p-4 flex flex-col gap-3"
     >
-      {spec.title && (
+      {normalized.title && (
         <p
           className="font-medium truncate"
           style={{ fontSize: 11, color: "var(--text2)" }}
         >
-          {spec.title}
+          {normalized.title}
         </p>
       )}
-      {renderChart(spec)}
+      {renderChart(normalized)}
     </div>
   );
 }

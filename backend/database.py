@@ -101,6 +101,17 @@ async def create_tables(db: aiosqlite.Connection) -> None:
             content TEXT NOT NULL,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
+
+        CREATE TABLE IF NOT EXISTS query_history (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_query     TEXT NOT NULL,
+            route          TEXT NOT NULL,
+            route_reason   TEXT,
+            sql_query      TEXT,
+            chat_response  TEXT NOT NULL,
+            canvas_json    TEXT NOT NULL,
+            created_at     DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
         """
     )
     # Idempotent column migrations for existing databases.
@@ -407,5 +418,49 @@ async def save_message(role: str, content: str) -> None:
             (role, content),
         )
         await db.commit()
+    finally:
+        await db.close()
+
+
+async def any_upload_done() -> bool:
+    """True when at least one upload has a latest job with status='done'."""
+    for row in await list_uploads():
+        if row.get("status") == "done":
+            return True
+    return False
+
+
+async def save_query_turn(
+    user_query: str,
+    route: str,
+    route_reason: str | None,
+    sql_query: str | None,
+    chat_response: str,
+    canvas_json: str,
+) -> int:
+    db = await get_db()
+    try:
+        cur = await db.execute(
+            """
+            INSERT INTO query_history
+                (user_query, route, route_reason, sql_query, chat_response, canvas_json)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (user_query, route, route_reason, sql_query, chat_response, canvas_json),
+        )
+        await db.commit()
+        return int(cur.lastrowid)
+    finally:
+        await db.close()
+
+
+async def get_query_history() -> list[dict]:
+    db = await get_db()
+    try:
+        async with db.execute(
+            "SELECT * FROM query_history ORDER BY id ASC"
+        ) as cur:
+            rows = await cur.fetchall()
+        return [{k: r[k] for k in r.keys()} for r in rows]
     finally:
         await db.close()

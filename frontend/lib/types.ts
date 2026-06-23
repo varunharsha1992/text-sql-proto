@@ -213,3 +213,30 @@ export interface SchemaResponse {
   catalog: CatalogRow[];
   semantic_layer?: SchemaSemanticLayer | null;
 }
+
+export type QueryRoute = "sql" | "eda" | "both";
+
+export interface QueryChatRequest {
+  message: string;
+}
+
+export interface QueryTurn {
+  user_query: string;
+  route: QueryRoute;
+  route_reason?: string | null;
+  sql_query?: string | null;
+  chat: string;
+  canvas: CanvasResponse;
+}
+
+export interface QueryChatResponse {
+  chat: string;
+  canvas: CanvasResponse;
+  route: QueryRoute;
+  route_reason: string;
+  sql_query?: string | null;
+}
+
+export interface QueryHistoryResponse {
+  turns: QueryTurn[];
+}

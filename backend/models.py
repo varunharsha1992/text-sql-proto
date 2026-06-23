@@ -200,3 +200,28 @@ class ContextChatResponse(BaseModel):
 class SchemaResponse(BaseModel):
     catalog: list[CatalogRow]
     semantic_layer: SchemaSemanticLayer | None = None
+
+
+class QueryChatRequest(BaseModel):
+    message: str
+
+
+class QueryTurn(BaseModel):
+    user_query: str
+    route: Literal["sql", "eda", "both"]
+    route_reason: str | None = None
+    sql_query: str | None = None
+    chat: str
+    canvas: CanvasResponse
+
+
+class QueryChatResponse(BaseModel):
+    chat: str
+    canvas: CanvasResponse
+    route: Literal["sql", "eda", "both"]
+    route_reason: str
+    sql_query: str | None = None
+
+
+class QueryHistoryResponse(BaseModel):
+    turns: list[QueryTurn]

@@ -14,8 +14,17 @@ import type {
   UploadSummary,
   CatalogRow,
   SchemaSemanticLayer,
+  CanvasResponse,
 } from "./types";
-import { getJob, listUploads, getSchema, postContextChat, postContextComplete } from "./api";
+import {
+  getJob,
+  listUploads,
+  getSchema,
+  postContextChat,
+  postContextComplete,
+  postQueryChat,
+  getQueryHistory,
+} from "./api";
 
 async function getJobWithRetry(jobId: string, maxAttempts = 5): Promise<JobResponse> {
   let last: Error = new Error("Job fetch failed");
@@ -322,4 +331,80 @@ export function useChatTurn(): {
   }, []);
 
   return { messages, catalog, semanticLayer, complete, loading, error, send, markComplete };
+}
+
+// ─── Query canvas turn ───────────────────────────────────────────────────────
+
+export interface QueryMessage {
+  role: "user" | "agent";
+  content: string;
+  route?: "sql" | "eda" | "both";
+  routeReason?: string | null;
+  sqlQuery?: string | null;
+}
+
+export function useQueryTurn(): {
+  messages: QueryMessage[];
+  canvas: CanvasResponse | null;
+  loading: boolean;
+  error: string | null;
+  send: (message: string) => Promise<void>;
+} {
+  const [messages, setMessages] = useState<QueryMessage[]>([]);
+  const [canvas, setCanvas] = useState<CanvasResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const loadedRef = useRef(false);
+
+  useEffect(() => {
+    if (loadedRef.current) return;
+    loadedRef.current = true;
+    (async () => {
+      try {
+        const hist = await getQueryHistory();
+        if (hist.turns.length === 0) return;
+        setMessages(
+          hist.turns.flatMap((t) => [
+            { role: "user" as const, content: t.user_query },
+            {
+              role: "agent" as const,
+              content: t.chat,
+              route: t.route,
+              routeReason: t.route_reason,
+              sqlQuery: t.sql_query,
+            },
+          ])
+        );
+        setCanvas(hist.turns[hist.turns.length - 1].canvas);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to load history");
+      }
+    })();
+  }, []);
+
+  const send = useCallback(async (message: string) => {
+    setError(null);
+    setLoading(true);
+    setMessages((m) => [...m, { role: "user", content: message }]);
+    try {
+      const res = await postQueryChat(message);
+      setMessages((m) => [
+        ...m,
+        {
+          role: "agent",
+          content: res.chat,
+          route: res.route,
+          routeReason: res.route_reason,
+          sqlQuery: res.sql_query,
+        },
+      ]);
+      setCanvas(res.canvas);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Query failed");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return { messages, canvas, loading, error, send };
 }

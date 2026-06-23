@@ -4,6 +4,8 @@ import type {
   UploadsListResponse,
   SchemaResponse,
   ContextChatResponse,
+  QueryChatResponse,
+  QueryHistoryResponse,
 } from "./types";
 
 /** Same-origin `/api` (Next rewrites) unless NEXT_PUBLIC_API_URL is set to bypass the dev proxy (e.g. http://127.0.0.1:8000). */
@@ -81,4 +83,26 @@ export async function postContextComplete(): Promise<{ ok: boolean }> {
   const res = await fetch(apiPath("/context/complete"), { method: "POST" });
   if (!res.ok) throw new Error("Failed to mark complete");
   return res.json() as Promise<{ ok: boolean }>;
+}
+
+export async function postQueryChat(message: string): Promise<QueryChatResponse> {
+  const res = await fetch(apiPath("/query/chat"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail ?? "Query failed");
+  }
+  return res.json() as Promise<QueryChatResponse>;
+}
+
+export async function getQueryHistory(): Promise<QueryHistoryResponse> {
+  const res = await fetch(apiPath("/query/history"));
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail ?? "Failed to load query history");
+  }
+  return res.json() as Promise<QueryHistoryResponse>;
 }

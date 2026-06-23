@@ -1,12 +1,15 @@
 "use client";
 
-import { useChatTurn } from "@/lib/hooks";
+import { useRouter } from "next/navigation";
+import { useChatTurn, useUploadId } from "@/lib/hooks";
 import ChatPanel from "@/components/ChatPanel";
 import CatalogTable from "@/components/CatalogTable";
 import RelationshipList from "@/components/RelationshipList";
 import SchemaSemanticView from "@/components/SchemaSemanticView";
 
 export default function ContextPage() {
+  const router = useRouter();
+  const { edaDone } = useUploadId();
   const { messages, catalog, semanticLayer, complete, loading, error, send, markComplete } =
     useChatTurn();
 
@@ -29,6 +32,16 @@ export default function ContextPage() {
           onSend={send}
           onMarkComplete={markComplete}
         />
+        {edaDone && (
+          <button
+            type="button"
+            onClick={() => router.push("/query")}
+            className="mt-2 w-full rounded-lg px-3 py-2 text-[13px] font-medium"
+            style={{ background: "var(--accent)", color: "#000" }}
+          >
+            Continue to Query Canvas →
+          </button>
+        )}
       </section>
 
       {/* Right — schema (60%) */}

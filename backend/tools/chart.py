@@ -7,6 +7,24 @@ from langchain_core.tools import tool
 _ALLOWED_CHART_TYPES = {"bar", "line", "histogram", "scatter", "heatmap", "boxplot"}
 
 
+def normalize_chart_data(data: list[dict]) -> list[dict[str, str | int | float]]:
+    """Map common LLM key aliases (label/value, name/value) to ChartSpec x/y."""
+    out: list[dict[str, str | int | float]] = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        if "x" in item and "y" in item:
+            out.append({"x": item["x"], "y": item["y"]})
+            continue
+        x = item.get("label") or item.get("name") or item.get("category")
+        y = item.get("value")
+        if x is not None and y is not None:
+            out.append({"x": x, "y": y})
+        else:
+            out.append(item)
+    return out
+
+
 def build_chart_spec_dict(
     chart_type: str,
     title: str,
@@ -28,6 +46,8 @@ def build_chart_spec_dict(
 
     if not all(isinstance(item, dict) for item in data):
         return {"error": "Every item in data must be a dict."}
+
+    data = normalize_chart_data(data)
 
     if len(data) > 1:
         first_keys = set(data[0].keys())
