@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json as _json
 import logging
 import os
 import re
@@ -66,6 +67,39 @@ async def create_tables(db: aiosqlite.Connection) -> None:
             error TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS schema_meta (
+            id TEXT PRIMARY KEY DEFAULT 'global',
+            semantic_layer TEXT,
+            context_complete BOOLEAN DEFAULT FALSE,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS catalog (
+            upload_id TEXT NOT NULL,
+            slug TEXT NOT NULL,
+            column_name TEXT NOT NULL,
+            data_type TEXT,
+            semantic_role TEXT,
+            business_context TEXT,
+            description TEXT,
+            is_primary_key BOOLEAN DEFAULT FALSE,
+            is_foreign_key BOOLEAN DEFAULT FALSE,
+            foreign_key_ref TEXT,
+            is_pii BOOLEAN DEFAULT FALSE,
+            unit TEXT,
+            sample_values TEXT,
+            null_pct REAL,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (upload_id, column_name)
+        );
+
+        CREATE TABLE IF NOT EXISTS context_conversations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            role TEXT NOT NULL,
+            content TEXT NOT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
         """
     )
@@ -231,5 +265,147 @@ async def list_uploads() -> list[dict]:
         ) as cursor:
             rows = await cursor.fetchall()
         return [{key: row[key] for key in row.keys()} for row in rows]
+    finally:
+        await db.close()
+
+
+_CATALOG_FIELDS = (
+    "data_type", "semantic_role", "business_context", "description",
+    "is_primary_key", "is_foreign_key", "foreign_key_ref", "is_pii",
+    "unit", "sample_values", "null_pct",
+)
+
+
+async def get_upload(upload_id: str) -> dict | None:
+    db = await get_db()
+    try:
+        async with db.execute("SELECT * FROM uploads WHERE id = ?", (upload_id,)) as cur:
+            row = await cur.fetchone()
+        return {k: row[k] for k in row.keys()} if row else None
+    finally:
+        await db.close()
+
+
+async def get_catalog() -> list[dict]:
+    db = await get_db()
+    try:
+        async with db.execute(
+            "SELECT * FROM catalog ORDER BY slug, column_name"
+        ) as cur:
+            rows = await cur.fetchall()
+        return [{k: r[k] for k in r.keys()} for r in rows]
+    finally:
+        await db.close()
+
+
+async def catalog_count() -> int:
+    db = await get_db()
+    try:
+        async with db.execute("SELECT COUNT(*) FROM catalog") as cur:
+            (n,) = await cur.fetchone()
+        return int(n)
+    finally:
+        await db.close()
+
+
+async def upsert_catalog_entry(
+    upload_id: str, slug: str, column_name: str, updates: dict
+) -> None:
+    """Insert or update one catalog row. `updates` may contain any of _CATALOG_FIELDS;
+    sample_values (a list) is JSON-encoded."""
+    clean: dict = {}
+    for field in _CATALOG_FIELDS:
+        if field in updates and updates[field] is not None:
+            val = updates[field]
+            if field == "sample_values" and isinstance(val, list):
+                val = _json.dumps([str(x) for x in val])
+            clean[field] = val
+    db = await get_db()
+    try:
+        # Ensure the row exists (keyed by upload_id, column_name), then patch fields.
+        await db.execute(
+            "INSERT OR IGNORE INTO catalog (upload_id, slug, column_name) VALUES (?, ?, ?)",
+            (upload_id, slug, column_name),
+        )
+        if clean:
+            sets = ", ".join(f"{f} = ?" for f in clean)
+            params = list(clean.values()) + [upload_id, column_name]
+            await db.execute(
+                f"UPDATE catalog SET {sets}, updated_at = CURRENT_TIMESTAMP "
+                f"WHERE upload_id = ? AND column_name = ?",
+                params,
+            )
+        await db.commit()
+    finally:
+        await db.close()
+
+
+async def _ensure_schema_row(db: aiosqlite.Connection) -> None:
+    await db.execute("INSERT OR IGNORE INTO schema_meta (id) VALUES ('global')")
+
+
+async def get_schema_meta() -> dict:
+    db = await get_db()
+    try:
+        await _ensure_schema_row(db)
+        await db.commit()
+        async with db.execute("SELECT * FROM schema_meta WHERE id = 'global'") as cur:
+            row = await cur.fetchone()
+        return {k: row[k] for k in row.keys()}
+    finally:
+        await db.close()
+
+
+async def get_schema_semantic_layer() -> str | None:
+    meta = await get_schema_meta()
+    val = meta.get("semantic_layer")
+    return val if isinstance(val, str) else None
+
+
+async def set_schema_semantic_layer(json_str: str) -> None:
+    db = await get_db()
+    try:
+        await _ensure_schema_row(db)
+        await db.execute(
+            "UPDATE schema_meta SET semantic_layer = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 'global'",
+            (json_str,),
+        )
+        await db.commit()
+    finally:
+        await db.close()
+
+
+async def mark_schema_context_complete() -> None:
+    db = await get_db()
+    try:
+        await _ensure_schema_row(db)
+        await db.execute(
+            "UPDATE schema_meta SET context_complete = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = 'global'"
+        )
+        await db.commit()
+    finally:
+        await db.close()
+
+
+async def get_conversation() -> list[dict]:
+    db = await get_db()
+    try:
+        async with db.execute(
+            "SELECT role, content FROM context_conversations ORDER BY id"
+        ) as cur:
+            rows = await cur.fetchall()
+        return [{"role": r["role"], "content": r["content"]} for r in rows]
+    finally:
+        await db.close()
+
+
+async def save_message(role: str, content: str) -> None:
+    db = await get_db()
+    try:
+        await db.execute(
+            "INSERT INTO context_conversations (role, content) VALUES (?, ?)",
+            (role, content),
+        )
+        await db.commit()
     finally:
         await db.close()
