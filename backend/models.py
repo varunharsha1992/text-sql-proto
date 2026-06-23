@@ -91,6 +91,62 @@ class ProgressItem(BaseModel):
     status: Literal["pending", "in_progress", "completed"]
 
 
+# ── Connected-schema context (multi-table) ───────────────────────────────────
+class SchemaTable(BaseModel):
+    name: str
+    grain: str
+    description: str
+
+
+class Relationship(BaseModel):
+    from_table: str
+    from_column: str
+    to_table: str
+    to_column: str
+    kind: Literal["one_to_many", "many_to_one", "one_to_one", "many_to_many"] | None = None
+    confidence: float | None = None
+
+
+class SchemaMeasure(BaseModel):
+    name: str
+    table: str
+    column: str
+    aggregation: Literal["sum", "avg", "count", "count_distinct", "min", "max", "median"]
+    description: str
+
+
+class SchemaDimension(BaseModel):
+    name: str
+    table: str
+    column: str
+    description: str
+
+
+class SchemaSemanticLayer(BaseModel):
+    tables: list[SchemaTable]
+    relationships: list[Relationship]
+    measures: list[SchemaMeasure]
+    dimensions: list[SchemaDimension]
+    suggested_questions: list[str]
+
+
+class CatalogRow(BaseModel):
+    upload_id: str
+    slug: str
+    column_name: str
+    data_type: str | None = None
+    semantic_role: Literal["identifier", "datetime", "measure", "dimension"] | None = None
+    business_context: str | None = None
+    description: str | None = None
+    is_primary_key: bool = False
+    is_foreign_key: bool = False
+    foreign_key_ref: str | None = None
+    is_pii: bool = False
+    unit: str | None = None
+    sample_values: list[str] = []
+    null_pct: float | None = None
+
+
 # CanvasResponse — the single output contract for ALL agents
 class CanvasResponse(BaseModel):
     insights: list[InsightItem]
@@ -127,3 +183,20 @@ class JobResponse(BaseModel):
     result: CanvasResponse | None = None
     error: str | None = None
     progress: list[ProgressItem] | None = None
+
+
+class ContextChatRequest(BaseModel):
+    message: str
+
+
+class ContextChatResponse(BaseModel):
+    chat: str
+    canvas: CanvasResponse
+    catalog: list[CatalogRow]
+    semantic_layer: SchemaSemanticLayer | None = None
+    complete: bool
+
+
+class SchemaResponse(BaseModel):
+    catalog: list[CatalogRow]
+    semantic_layer: SchemaSemanticLayer | None = None
