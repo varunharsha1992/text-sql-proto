@@ -19,20 +19,30 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
 
 from backend.agents.autoeda import run_autoeda_agent
+from backend.agents.context import run_context_turn
 from backend.database import (
     create_job,
     create_tables,
     create_upload,
+    get_catalog,
     get_db,
     get_job,
+    get_schema_semantic_layer,
     list_uploads,
+    mark_schema_context_complete,
     update_job,
 )
+from backend.schema_synth import ensure_schema_seed
 from backend.tools.autoeda_baseline import baseline_canvas
 from backend.tools.autoeda_writer import persist_autoeda_canvas
 from backend.models import (
     CanvasResponse,
+    CatalogRow,
+    ContextChatRequest,
+    ContextChatResponse,
     JobResponse,
+    SchemaResponse,
+    SchemaSemanticLayer,
     UploadResponse,
     UploadSummary,
     UploadsListResponse,
@@ -224,3 +234,77 @@ async def list_uploads_route() -> UploadsListResponse:
         for r in rows
     ]
     return UploadsListResponse(uploads=uploads)
+
+
+def _to_catalog_row(d: dict) -> CatalogRow:
+    raw_samples = d.get("sample_values")
+    samples: list[str] = []
+    if isinstance(raw_samples, str) and raw_samples:
+        try:
+            parsed = json.loads(raw_samples)
+            if isinstance(parsed, list):
+                samples = [str(x) for x in parsed]
+        except json.JSONDecodeError:
+            samples = []
+    role = d.get("semantic_role")
+    return CatalogRow(
+        upload_id=_require_str(d["upload_id"], "upload_id"),
+        slug=_require_str(d["slug"], "slug"),
+        column_name=_require_str(d["column_name"], "column_name"),
+        data_type=d.get("data_type") if isinstance(d.get("data_type"), str) else None,
+        semantic_role=role if role in ("identifier", "datetime", "measure", "dimension") else None,
+        business_context=d.get("business_context") if isinstance(d.get("business_context"), str) else None,
+        description=d.get("description") if isinstance(d.get("description"), str) else None,
+        is_primary_key=bool(d.get("is_primary_key")),
+        is_foreign_key=bool(d.get("is_foreign_key")),
+        foreign_key_ref=d.get("foreign_key_ref") if isinstance(d.get("foreign_key_ref"), str) else None,
+        is_pii=bool(d.get("is_pii")),
+        unit=d.get("unit") if isinstance(d.get("unit"), str) else None,
+        sample_values=samples,
+        null_pct=d.get("null_pct") if isinstance(d.get("null_pct"), (int, float)) else None,
+    )
+
+
+def _parse_schema_layer(raw: str | None) -> SchemaSemanticLayer | None:
+    if not raw:
+        return None
+    try:
+        parsed = json.loads(raw)
+        return SchemaSemanticLayer(**parsed)
+    except (json.JSONDecodeError, ValidationError):
+        logger.exception("Stored schema semantic layer failed to parse")
+        return None
+
+
+@app.get("/api/context/schema", response_model=SchemaResponse)
+async def context_schema() -> SchemaResponse:
+    await ensure_schema_seed()
+    catalog = [_to_catalog_row(c) for c in await get_catalog()]
+    layer = _parse_schema_layer(await get_schema_semantic_layer())
+    return SchemaResponse(catalog=catalog, semantic_layer=layer)
+
+
+@app.post("/api/context/chat", response_model=ContextChatResponse)
+async def context_chat(req: ContextChatRequest) -> ContextChatResponse:
+    turn = await run_context_turn(req.message)
+    catalog = [_to_catalog_row(c) for c in turn["catalog"]]
+    sl = turn["semantic_layer"]
+    layer: SchemaSemanticLayer | None = None
+    if sl is not None:
+        try:
+            layer = SchemaSemanticLayer(**sl)
+        except ValidationError:
+            layer = None
+    return ContextChatResponse(
+        chat=turn["chat"],
+        canvas=CanvasResponse(insights=[], charts=[]),
+        catalog=catalog,
+        semantic_layer=layer,
+        complete=bool(turn["complete"]),
+    )
+
+
+@app.post("/api/context/complete")
+async def context_complete() -> dict:
+    await mark_schema_context_complete()
+    return {"ok": True}
