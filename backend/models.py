@@ -107,6 +107,20 @@ class UploadResponse(BaseModel):
     slug: str
 
 
+class UploadSummary(BaseModel):
+    upload_id: str
+    slug: str
+    filename: str
+    row_count: int | None = None
+    col_count: int | None = None
+    job_id: str | None = None
+    status: Literal["pending", "running", "done", "error"] | None = None
+
+
+class UploadsListResponse(BaseModel):
+    uploads: list[UploadSummary]
+
+
 class JobResponse(BaseModel):
     job_id: str
     status: Literal["pending", "running", "done", "error"]

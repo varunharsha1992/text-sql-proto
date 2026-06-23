@@ -207,3 +207,29 @@ async def get_job(job_id: str) -> dict | None:
         return {key: row[key] for key in row.keys()}
     finally:
         await db.close()
+
+
+async def list_uploads() -> list[dict]:
+    """Every uploaded table with its latest job id + status. Newest first."""
+    db = await get_db()
+    try:
+        async with db.execute(
+            """
+            SELECT
+                u.id        AS id,
+                u.slug      AS slug,
+                u.filename  AS filename,
+                u.row_count AS row_count,
+                u.col_count AS col_count,
+                (SELECT job_id FROM jobs WHERE upload_id = u.id
+                 ORDER BY created_at DESC LIMIT 1) AS job_id,
+                (SELECT status FROM jobs WHERE upload_id = u.id
+                 ORDER BY created_at DESC LIMIT 1) AS status
+            FROM uploads u
+            ORDER BY u.uploaded_at DESC
+            """
+        ) as cursor:
+            rows = await cursor.fetchall()
+        return [{key: row[key] for key in row.keys()} for row in rows]
+    finally:
+        await db.close()

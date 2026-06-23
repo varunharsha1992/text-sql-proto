@@ -25,11 +25,18 @@ from backend.database import (
     create_upload,
     get_db,
     get_job,
+    list_uploads,
     update_job,
 )
 from backend.tools.autoeda_baseline import baseline_canvas
 from backend.tools.autoeda_writer import persist_autoeda_canvas
-from backend.models import CanvasResponse, JobResponse, UploadResponse
+from backend.models import (
+    CanvasResponse,
+    JobResponse,
+    UploadResponse,
+    UploadSummary,
+    UploadsListResponse,
+)
 from backend.utils.csv_parser import parse_csv_to_sqlite
 
 logger = logging.getLogger(__name__)
@@ -193,3 +200,27 @@ async def get_job_status(job_id: str) -> JobResponse:
         error=error_msg,
         progress=progress_items,
     )
+
+
+def _opt_status(value: object) -> Literal["pending", "running", "done", "error"] | None:
+    if value in ("pending", "running", "done", "error"):
+        return value  # type: ignore[return-value]
+    return None
+
+
+@app.get("/api/uploads", response_model=UploadsListResponse)
+async def list_uploads_route() -> UploadsListResponse:
+    rows = await list_uploads()
+    uploads = [
+        UploadSummary(
+            upload_id=_require_str(r["id"], "id"),
+            slug=_require_str(r["slug"], "slug"),
+            filename=_require_str(r["filename"], "filename"),
+            row_count=r["row_count"] if isinstance(r["row_count"], int) else None,
+            col_count=r["col_count"] if isinstance(r["col_count"], int) else None,
+            job_id=r["job_id"] if isinstance(r["job_id"], str) else None,
+            status=_opt_status(r["status"]),
+        )
+        for r in rows
+    ]
+    return UploadsListResponse(uploads=uploads)
