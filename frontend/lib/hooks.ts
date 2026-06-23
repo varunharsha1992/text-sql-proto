@@ -8,8 +8,14 @@ import {
   useRef,
   useState,
 } from "react";
-import type { JobResponse, JobStatus, UploadSummary } from "./types";
-import { getJob, listUploads } from "./api";
+import type {
+  JobResponse,
+  JobStatus,
+  UploadSummary,
+  CatalogRow,
+  SchemaSemanticLayer,
+} from "./types";
+import { getJob, listUploads, getSchema, postContextChat, postContextComplete } from "./api";
 
 async function getJobWithRetry(jobId: string, maxAttempts = 5): Promise<JobResponse> {
   let last: Error = new Error("Job fetch failed");
@@ -241,4 +247,76 @@ export function useUploads(intervalMs = 2000): {
   }, [intervalMs, tick]);
 
   return { uploads, loading, refetch };
+}
+
+// ─── Context interview turn ──────────────────────────────────────────────────
+
+export interface ChatMessage {
+  role: "user" | "agent";
+  content: string;
+}
+
+export function useChatTurn(): {
+  messages: ChatMessage[];
+  catalog: CatalogRow[];
+  semanticLayer: SchemaSemanticLayer | null;
+  complete: boolean;
+  loading: boolean;
+  error: string | null;
+  send: (message: string) => Promise<void>;
+  markComplete: () => Promise<void>;
+} {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [catalog, setCatalog] = useState<CatalogRow[]>([]);
+  const [semanticLayer, setSemanticLayer] = useState<SchemaSemanticLayer | null>(null);
+  const [complete, setComplete] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const startedRef = useRef(false);
+
+  const runTurn = useCallback(async (message: string, echo: boolean) => {
+    setError(null);
+    setLoading(true);
+    if (echo) setMessages((m) => [...m, { role: "user", content: message }]);
+    try {
+      const res = await postContextChat(message);
+      setMessages((m) => [...m, { role: "agent", content: res.chat }]);
+      setCatalog(res.catalog);
+      setSemanticLayer(res.semantic_layer ?? null);
+      setComplete(res.complete);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Chat failed");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Seed the right panel, then fire the opening (__INIT__) turn once.
+  useEffect(() => {
+    if (startedRef.current) return;
+    startedRef.current = true;
+    (async () => {
+      try {
+        const schema = await getSchema();
+        setCatalog(schema.catalog);
+        setSemanticLayer(schema.semantic_layer ?? null);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Failed to load schema");
+      }
+      await runTurn("__INIT__", false);
+    })();
+  }, [runTurn]);
+
+  const send = useCallback((message: string) => runTurn(message, true), [runTurn]);
+
+  const markComplete = useCallback(async () => {
+    try {
+      await postContextComplete();
+      setComplete(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to mark complete");
+    }
+  }, []);
+
+  return { messages, catalog, semanticLayer, complete, loading, error, send, markComplete };
 }

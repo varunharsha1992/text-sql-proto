@@ -1,4 +1,10 @@
-import type { JobResponse, UploadResponse, UploadsListResponse } from "./types";
+import type {
+  JobResponse,
+  UploadResponse,
+  UploadsListResponse,
+  SchemaResponse,
+  ContextChatResponse,
+} from "./types";
 
 /** Same-origin `/api` (Next rewrites) unless NEXT_PUBLIC_API_URL is set to bypass the dev proxy (e.g. http://127.0.0.1:8000). */
 function apiPath(path: string): string {
@@ -47,4 +53,32 @@ export async function listUploads(): Promise<UploadsListResponse> {
     throw new Error(err.detail ?? "Failed to list uploads");
   }
   return res.json() as Promise<UploadsListResponse>;
+}
+
+export async function getSchema(): Promise<SchemaResponse> {
+  const res = await fetch(apiPath("/context/schema"));
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail ?? "Failed to load schema");
+  }
+  return res.json() as Promise<SchemaResponse>;
+}
+
+export async function postContextChat(message: string): Promise<ContextChatResponse> {
+  const res = await fetch(apiPath("/context/chat"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ message }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(err.detail ?? "Chat failed");
+  }
+  return res.json() as Promise<ContextChatResponse>;
+}
+
+export async function postContextComplete(): Promise<{ ok: boolean }> {
+  const res = await fetch(apiPath("/context/complete"), { method: "POST" });
+  if (!res.ok) throw new Error("Failed to mark complete");
+  return res.json() as Promise<{ ok: boolean }>;
 }
