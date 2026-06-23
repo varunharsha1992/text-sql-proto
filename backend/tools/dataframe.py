@@ -93,3 +93,16 @@ def get_dataframe_profile(upload_id: str) -> dict:
         column_profiles.append(col_profile)
 
     return {"shape": [rows, cols], "columns": column_profiles}
+
+
+def sample_column_values(upload_id: str, column_name: str, n: int = 10) -> list[str]:
+    """Up to n random non-null sample values from a column, as strings."""
+    df = load_upload_dataframe_sync(upload_id)
+    if column_name not in df.columns:
+        return []
+    series = df[column_name].dropna()
+    if series.empty:
+        return []
+    take = min(n, len(series))
+    sampled = series.sample(take, random_state=42) if len(series) > take else series
+    return [str(v) for v in sampled.tolist()]
