@@ -148,7 +148,7 @@ No database or storage migration required for this pattern — SQLite and `./dat
 |---------|-------|
 | **Repo** | `varunharsha1992/text-sql-proto` |
 | **Branch** | `002-connected-schema-context` (or `main` after merge) |
-| **Entrypoint** | `datalens_mcp/server.py:mcp` |
+| **Entrypoint** | `mcp_server.py:mcp` |
 | **Requirements** | Root [`requirements.txt`](requirements.txt) (auto-detected) |
 | **Authentication** | On (recommended — OAuth for Cowork) |
 

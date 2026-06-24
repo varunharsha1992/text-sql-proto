@@ -6,9 +6,9 @@ from pathlib import Path
 import httpx
 from fastmcp import Context, FastMCP
 
-from datalens_mcp.client import DataLensClient, format_connect_error, format_http_error
-from datalens_mcp.config import API_URL, POLL_INTERVAL_SEC
-from datalens_mcp.progress import poll_job_until_done
+from .client import DataLensClient, format_connect_error, format_http_error
+from .config import API_URL, POLL_INTERVAL_SEC
+from .progress import poll_job_until_done
 
 mcp = FastMCP("DataLens")
 _client = DataLensClient()

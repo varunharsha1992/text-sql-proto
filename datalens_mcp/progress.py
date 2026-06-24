@@ -4,7 +4,7 @@ import asyncio
 import time
 from typing import TYPE_CHECKING, Callable, Awaitable
 
-from datalens_mcp.config import JOB_TIMEOUT_SEC, POLL_INTERVAL_SEC, PROGRESS_HEARTBEAT_SEC
+from .config import JOB_TIMEOUT_SEC, POLL_INTERVAL_SEC, PROGRESS_HEARTBEAT_SEC
 
 if TYPE_CHECKING:
     from fastmcp import Context

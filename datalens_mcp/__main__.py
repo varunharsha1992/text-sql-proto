@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datalens_mcp.config import MCP_HOST, MCP_PORT
-from datalens_mcp.server import mcp
+from .config import MCP_HOST, MCP_PORT
+from .server import mcp
 
 
 def main() -> None:
