@@ -90,3 +90,46 @@ async def analyze_csv(
         },
     }
     return json.dumps(out, indent=2)
+
+
+@mcp.tool
+async def context_chat(ctx: Context, message: str) -> str:
+    """One context-interview turn. Use message='__INIT__' to start."""
+    await ctx.report_progress(progress=0, message="Starting context turn…")
+    try:
+        raw = await _client.context_chat(message)
+    except httpx.ConnectError as exc:
+        raise RuntimeError(format_connect_error(API_URL)) from exc
+    except httpx.HTTPStatusError as exc:
+        raise RuntimeError(format_http_error(exc)) from exc
+
+    catalog = raw.get("catalog") or []
+    out = {
+        "chat": raw.get("chat", ""),
+        "complete": bool(raw.get("complete")),
+        "catalog_column_count": len(catalog),
+        "semantic_layer": raw.get("semantic_layer"),
+        "catalog_preview": catalog[:5],
+    }
+    return json.dumps(out, indent=2)
+
+
+@mcp.tool
+async def query_chat(ctx: Context, message: str) -> str:
+    """One schema-wide query turn (SQL / EDA / both)."""
+    await ctx.report_progress(progress=0, message="Running query…")
+    try:
+        raw = await _client.query_chat(message)
+    except httpx.ConnectError as exc:
+        raise RuntimeError(format_connect_error(API_URL)) from exc
+    except httpx.HTTPStatusError as exc:
+        raise RuntimeError(format_http_error(exc)) from exc
+
+    out = {
+        "chat": raw.get("chat", ""),
+        "route": raw.get("route"),
+        "route_reason": raw.get("route_reason"),
+        "sql_query": raw.get("sql_query"),
+        "canvas": raw.get("canvas"),
+    }
+    return json.dumps(out, indent=2)
