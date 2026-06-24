@@ -1,7 +1,7 @@
 # DataLens MCP Server for Claude Cowork (Design)
 
 **Date:** 2026-06-23  
-**Status:** Approved (brainstorming) — pending implementation plan  
+**Status:** Implemented — see plan docs/superpowers/plans/2026-06-23-datalens-mcp-cowork.md  
 **Builds on:** Feature 001 (AutoEDA upload + job poll), Feature 002 (connected-schema context + catalog + semantic layer), Feature 003 (schema-wide query canvas).  
 **Demo moment:** User uploads CSVs in Cowork → `analyze_csv` runs AutoEDA with live progress → optional `context_chat` interview → `query_chat` answers a multi-table business question — all via one Streamable HTTP MCP connector, without opening the web UI.
 
