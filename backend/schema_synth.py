@@ -16,6 +16,7 @@ from pydantic import ValidationError
 
 from backend.database import (
     catalog_count,
+    get_catalog,
     get_schema_semantic_layer,
     get_upload,
     list_uploads,
@@ -37,6 +38,54 @@ _SEMANTIC_ROLE = {
     "boolean": "dimension",
     "text": "dimension",
 }
+
+
+def _rel_key(rel: dict) -> tuple[str, str, str, str]:
+    return (
+        rel.get("from_table", ""),
+        rel.get("from_column", ""),
+        rel.get("to_table", ""),
+        rel.get("to_column", ""),
+    )
+
+
+def _catalog_key(row: dict) -> tuple[str, str]:
+    return (row["upload_id"], row["column_name"])
+
+
+def _user_catalog_fields_set(row: dict) -> bool:
+    if row.get("business_context"):
+        return True
+    if row.get("foreign_key_ref"):
+        return True
+    if row.get("is_primary_key"):
+        return True
+    if row.get("is_foreign_key"):
+        return True
+    return False
+
+
+def _merge_relationships(existing: list[dict], detected: list[dict]) -> list[dict]:
+    seen = {_rel_key(r) for r in existing}
+    merged = list(existing)
+    for rel in detected:
+        key = _rel_key(rel)
+        if key not in seen:
+            merged.append(rel)
+            seen.add(key)
+    return merged
+
+
+def _profiler_catalog_updates(entry: dict) -> dict:
+    return {
+        "data_type": entry.get("dtype"),
+        "semantic_role": _SEMANTIC_ROLE.get(entry.get("semantic_type", ""), "dimension"),
+        "description": entry.get("description"),
+        "sample_values": entry.get("sample_values") or [],
+        "is_pii": bool(entry.get("is_pii", False)),
+        "unit": entry.get("unit"),
+        "null_pct": entry.get("null_pct"),
+    }
 
 
 def _id_like(name: str) -> bool:
@@ -128,23 +177,38 @@ def _validated_layer_json(candidate: dict, tables_meta: list[dict], suggested: l
                        "dimensions": [], "suggested_questions": []})
 
 
-async def ensure_schema_seed() -> None:
-    """Idempotent: seed the catalog from every table's data_dictionary and build the
-    first-draft schema semantic layer. Safe to re-run — catalog upserts are idempotent,
-    and a prior run that crashed mid-way (or never stored a layer) is completed on the
-    next call. The guard only short-circuits once a seed has FULLY completed."""
-    if await catalog_count() > 0 and await get_schema_semantic_layer():
-        return
+async def sync_connected_schema() -> dict:
+    """Incremental idempotent merge of all done uploads into catalog + global semantic layer.
+
+    Returns dict with keys: tables_synced (list[str]), catalog (list[dict]), semantic_layer (dict|None).
+    """
+    existing_catalog = await get_catalog()
+    catalog_by_key = {_catalog_key(c): c for c in existing_catalog}
+
+    existing_layer_raw = await get_schema_semantic_layer()
+    existing_layer: dict = {}
+    if existing_layer_raw:
+        try:
+            existing_layer = json.loads(existing_layer_raw)
+        except json.JSONDecodeError:
+            existing_layer = {}
+
+    existing_tables = {
+        t.get("name", ""): t
+        for t in (existing_layer.get("tables") or [])
+        if isinstance(t, dict)
+    }
 
     uploads = await list_uploads()
     tables_meta: list[dict] = []
     measures: list[dict] = []
     dimensions: list[dict] = []
     suggested: list[str] = []
+    tables_synced: list[str] = []
 
     for u in uploads:
-        # A malformed dictionary/semantic-layer JSON for one table must not abort the whole
-        # seed (which, before, left every remaining table permanently uncatalogued).
+        if u.get("status") != "done":
+            continue
         try:
             upload = await get_upload(u["id"])
             if upload is None:
@@ -153,27 +217,27 @@ async def ensure_schema_seed() -> None:
             dd_raw = upload.get("data_dictionary")
             sl_raw = upload.get("semantic_layer")
             entries = json.loads(dd_raw) if isinstance(dd_raw, str) and dd_raw else []
+            if not entries:
+                continue
             per_table_sl = json.loads(sl_raw) if isinstance(sl_raw, str) and sl_raw else {}
 
-            # Seed catalog rows from this table's data dictionary.
             for e in entries:
                 col = e.get("column")
                 if not col:
                     continue
-                await upsert_catalog_entry(u["id"], slug, col, {
-                    "data_type": e.get("dtype"),
-                    "semantic_role": _SEMANTIC_ROLE.get(e.get("semantic_type", ""), "dimension"),
-                    "description": e.get("description"),
-                    "sample_values": e.get("sample_values") or [],
-                    "is_pii": bool(e.get("is_pii", False)),
-                    "unit": e.get("unit"),
-                    "null_pct": e.get("null_pct"),
-                })
+                updates = _profiler_catalog_updates(e)
+                existing_row = catalog_by_key.get((u["id"], col))
+                if existing_row and _user_catalog_fields_set(existing_row):
+                    pass  # preserve interview fields — only patch profiler keys
+                await upsert_catalog_entry(u["id"], slug, col, updates)
 
+            prev_desc = ""
+            if slug in existing_tables:
+                prev_desc = str(existing_tables[slug].get("description") or "")
             tables_meta.append({
                 "name": slug,
                 "grain": str(per_table_sl.get("grain") or ""),
-                "description": "",
+                "description": prev_desc,
             })
             for m in per_table_sl.get("measures", []) or []:
                 measures.append({
@@ -189,17 +253,26 @@ async def ensure_schema_seed() -> None:
                     "description": dim.get("description", ""),
                 })
             for q in per_table_sl.get("suggested_questions", []) or []:
-                if q not in suggested:
+                if q and q not in suggested:
                     suggested.append(q)
+            tables_synced.append(slug)
         except Exception:  # noqa: BLE001
-            logger.exception("Skipping table %s during schema seed", u.get("id"))
+            logger.exception("Skipping table %s during schema sync", u.get("id"))
             continue
 
     try:
-        relationships = detect_relationships()
+        detected = detect_relationships()
     except Exception:  # noqa: BLE001
-        logger.exception("Relationship detection failed during seed; continuing without")
-        relationships = []
+        logger.exception("Relationship detection failed during sync; continuing without")
+        detected = []
+
+    existing_rels = existing_layer.get("relationships") or []
+    if not isinstance(existing_rels, list):
+        existing_rels = []
+    relationships = _merge_relationships(
+        [r for r in existing_rels if isinstance(r, dict)],
+        detected,
+    )
 
     candidate = {
         "tables": tables_meta,
@@ -208,6 +281,26 @@ async def ensure_schema_seed() -> None:
         "dimensions": dimensions,
         "suggested_questions": suggested[:8],
     }
-    await set_schema_semantic_layer(_validated_layer_json(candidate, tables_meta, suggested))
-    logger.info("Seeded schema: %s tables, %s relationships",
-                len(tables_meta), len(relationships))
+    layer_json = _validated_layer_json(candidate, tables_meta, suggested)
+    await set_schema_semantic_layer(layer_json)
+    logger.info("Synced schema: %s tables, %s relationships", len(tables_meta), len(relationships))
+
+    refreshed_catalog = await get_catalog()
+    layer_parsed = None
+    try:
+        layer_parsed = json.loads(layer_json)
+    except json.JSONDecodeError:
+        layer_parsed = None
+
+    return {
+        "tables_synced": tables_synced,
+        "catalog": refreshed_catalog,
+        "semantic_layer": layer_parsed,
+    }
+
+
+async def ensure_schema_seed() -> None:
+    """Idempotent first-time seed. Short-circuits once catalog + layer exist."""
+    if await catalog_count() > 0 and await get_schema_semantic_layer():
+        return
+    await sync_connected_schema()
