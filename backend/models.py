@@ -202,6 +202,12 @@ class SchemaResponse(BaseModel):
     semantic_layer: SchemaSemanticLayer | None = None
 
 
+class SchemaSyncResponse(BaseModel):
+    catalog: list[CatalogRow]
+    semantic_layer: SchemaSemanticLayer | None = None
+    tables_synced: list[str]
+
+
 class QueryChatRequest(BaseModel):
     message: str
 
