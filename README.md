@@ -158,7 +158,7 @@ No database or storage migration required for this pattern — SQLite and `./dat
 
 | Variable | Example |
 |----------|---------|
-| `DATALENS_API_URL` | `https://abc123.ngrok-free.app` |
+| `DATALENS_API_URL` | `https://abc123.ngrok-free.app` | Must be a full URL with `https://` (hostname-only also works — we auto-prepend `https://`) |
 
 **Optional** (defaults in `datalens_mcp/config.py`):
 
@@ -232,6 +232,7 @@ docs/superpowers/  Feature specs and implementation plans
 | 404 on new API routes             | Kill all processes on port 8000; start a single uvicorn                  |
 | Context/Query times out in UI     | Set `NEXT_PUBLIC_API_URL=http://127.0.0.1:8000` in `frontend/.env.local` |
 | MCP tool errors “API unreachable” | Start FastAPI on `:8000`; set Horizon `DATALENS_API_URL` to ngrok HTTPS URL |
+| “Request URL is missing … protocol” | `DATALENS_API_URL` is empty or malformed on Horizon — set full URL, e.g. `https://abc123.ngrok-free.app` (not blank) |
 | Cowork rejects localhost MCP      | Deploy MCP on Horizon; tunnel backend with ngrok                           |
 | Agent errors                      | Check `OPENROUTER_API_KEY` in repo-root `.env` (backend, not Horizon)      |
 

@@ -15,7 +15,12 @@ _bootstrap = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_bootstrap)
 _bootstrap.ensure_repo_root()
 
-from datalens_mcp.client import DataLensClient, format_connect_error, format_http_error
+from datalens_mcp.client import (
+    DataLensClient,
+    format_connect_error,
+    format_http_error,
+    format_url_error,
+)
 from datalens_mcp.config import API_URL, POLL_INTERVAL_SEC
 from datalens_mcp.progress import poll_job_until_done
 
@@ -56,6 +61,8 @@ async def analyze_csv(
         upload = await _client.upload_csv(fname, content)
     except httpx.ConnectError as exc:
         raise RuntimeError(format_connect_error(API_URL)) from exc
+    except httpx.InvalidURL as exc:
+        raise RuntimeError(format_url_error(exc, API_URL)) from exc
     except httpx.HTTPStatusError as exc:
         raise RuntimeError(format_http_error(exc)) from exc
 
@@ -75,12 +82,16 @@ async def analyze_csv(
         raise
     except httpx.ConnectError as exc:
         raise RuntimeError(format_connect_error(API_URL)) from exc
+    except httpx.InvalidURL as exc:
+        raise RuntimeError(format_url_error(exc, API_URL)) from exc
 
     canvas = job.get("result") or {}
     try:
         sync = await _client.schema_sync()
     except httpx.ConnectError as exc:
         raise RuntimeError(format_connect_error(API_URL)) from exc
+    except httpx.InvalidURL as exc:
+        raise RuntimeError(format_url_error(exc, API_URL)) from exc
     except httpx.HTTPStatusError as exc:
         raise RuntimeError(format_http_error(exc)) from exc
 
@@ -109,6 +120,8 @@ async def context_chat(ctx: Context, message: str) -> str:
         raw = await _client.context_chat(message)
     except httpx.ConnectError as exc:
         raise RuntimeError(format_connect_error(API_URL)) from exc
+    except httpx.InvalidURL as exc:
+        raise RuntimeError(format_url_error(exc, API_URL)) from exc
     except httpx.HTTPStatusError as exc:
         raise RuntimeError(format_http_error(exc)) from exc
 
@@ -131,6 +144,8 @@ async def query_chat(ctx: Context, message: str) -> str:
         raw = await _client.query_chat(message)
     except httpx.ConnectError as exc:
         raise RuntimeError(format_connect_error(API_URL)) from exc
+    except httpx.InvalidURL as exc:
+        raise RuntimeError(format_url_error(exc, API_URL)) from exc
     except httpx.HTTPStatusError as exc:
         raise RuntimeError(format_http_error(exc)) from exc
 

@@ -50,4 +50,17 @@ def format_http_error(exc: httpx.HTTPStatusError) -> str:
 
 
 def format_connect_error(base_url: str) -> str:
-    return f"DataLens API unreachable at {base_url}"
+    hint = ""
+    if base_url == "http://127.0.0.1:8000":
+        hint = (
+            " (Horizon: set DATALENS_API_URL to your public backend URL, "
+            "e.g. https://abc123.ngrok-free.app)"
+        )
+    return f"DataLens API unreachable at {base_url}{hint}"
+
+
+def format_url_error(exc: Exception, base_url: str) -> str:
+    return (
+        f"Invalid DATALENS_API_URL ({base_url!r}): {exc}. "
+        "Set a full URL with https://, e.g. https://abc123.ngrok-free.app"
+    )
