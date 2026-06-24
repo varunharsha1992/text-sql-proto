@@ -35,7 +35,7 @@ from backend.database import (
     mark_schema_context_complete,
     update_job,
 )
-from backend.schema_synth import ensure_schema_seed
+from backend.schema_synth import ensure_schema_seed, sync_connected_schema
 from backend.tools.autoeda_baseline import baseline_canvas
 from backend.tools.autoeda_writer import persist_autoeda_canvas
 from backend.models import (
@@ -50,6 +50,7 @@ from backend.models import (
     QueryTurn,
     SchemaResponse,
     SchemaSemanticLayer,
+    SchemaSyncResponse,
     UploadResponse,
     UploadSummary,
     UploadsListResponse,
@@ -289,6 +290,20 @@ async def context_schema() -> SchemaResponse:
     catalog = [_to_catalog_row(c) for c in await get_catalog()]
     layer = _parse_schema_layer(await get_schema_semantic_layer())
     return SchemaResponse(catalog=catalog, semantic_layer=layer)
+
+
+@app.post("/api/schema/sync", response_model=SchemaSyncResponse)
+async def schema_sync() -> SchemaSyncResponse:
+    raw = await sync_connected_schema()
+    catalog = [_to_catalog_row(c) for c in raw["catalog"]]
+    layer = _parse_schema_layer(
+        json.dumps(raw["semantic_layer"]) if raw.get("semantic_layer") else None
+    )
+    return SchemaSyncResponse(
+        catalog=catalog,
+        semantic_layer=layer,
+        tables_synced=raw["tables_synced"],
+    )
 
 
 @app.post("/api/context/chat", response_model=ContextChatResponse)
