@@ -276,9 +276,16 @@ Host support for progress UI varies; heartbeats still help on long runs.
 | Query before any EDA done | Pass through HTTP 400 detail |
 | Invalid CSV input modes | Tool error before any HTTP call |
 
-### Cloud deployment (optional)
+### Cloud deployment (Horizon + local backend)
 
-Deploy the `datalens_mcp/` package as its own service with `mcp.run(transport="http", host="0.0.0.0")`. Set `DATALENS_API_URL` to the hosted FastAPI URL. Add auth before exposing beyond localhost (not in v1).
+Deploy MCP on [Prefect Horizon](https://horizon.prefect.io) from this repo:
+
+- **Entrypoint:** `datalens_mcp/server.py:mcp`
+- **Requirements:** root `requirements.txt`
+- **Horizon env (required):** `DATALENS_API_URL` → public backend URL (e.g. ngrok tunnel to local `:8000`)
+- **Backend env (local `.env`):** `OPENROUTER_API_KEY`, `DATABASE_URL`, `UPLOAD_DIR` — not needed on Horizon
+
+Step-by-step: see [README — Horizon deploy](../README.md#horizon-deploy-cowork--public-mcp).
 
 ---
 

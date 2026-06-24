@@ -1,0 +1,4 @@
+# Horizon / FastMCP Cloud MCP deploy (repo root — Horizon reads this file)
+# Backend deps live in backend/requirements.txt; frontend uses npm.
+fastmcp>=2.0.0
+httpx>=0.27.0
