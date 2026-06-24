@@ -280,7 +280,7 @@ Host support for progress UI varies; heartbeats still help on long runs.
 
 Deploy MCP on [Prefect Horizon](https://horizon.prefect.io) from this repo:
 
-- **Entrypoint:** `mcp_server.py:mcp`
+- **Entrypoint:** `mcp_server.py:mcp` or `datalens_mcp/server.py:mcp`
 - **Requirements:** root `requirements.txt`
 - **Horizon env (required):** `DATALENS_API_URL` → public backend URL (e.g. ngrok tunnel to local `:8000`)
 - **Backend env (local `.env`):** `OPENROUTER_API_KEY`, `DATABASE_URL`, `UPLOAD_DIR` — not needed on Horizon

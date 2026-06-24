@@ -1,14 +1,23 @@
 from __future__ import annotations
 
+import importlib.util
 import json
 from pathlib import Path
 
 import httpx
 from fastmcp import Context, FastMCP
 
-from .client import DataLensClient, format_connect_error, format_http_error
-from .config import API_URL, POLL_INTERVAL_SEC
-from .progress import poll_job_until_done
+# Horizon / fastmcp may load this file as a script (not datalens_mcp.server).
+_bootstrap_path = Path(__file__).resolve().parent / "_bootstrap.py"
+_spec = importlib.util.spec_from_file_location("datalens_mcp._bootstrap", _bootstrap_path)
+assert _spec is not None and _spec.loader is not None
+_bootstrap = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_bootstrap)
+_bootstrap.ensure_repo_root()
+
+from datalens_mcp.client import DataLensClient, format_connect_error, format_http_error
+from datalens_mcp.config import API_URL, POLL_INTERVAL_SEC
+from datalens_mcp.progress import poll_job_until_done
 
 mcp = FastMCP("DataLens")
 _client = DataLensClient()

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import httpx
 
-from .config import API_URL, JOB_TIMEOUT_SEC, QUERY_TIMEOUT_SEC
+from datalens_mcp.config import API_URL, JOB_TIMEOUT_SEC, QUERY_TIMEOUT_SEC
 
 
 class DataLensClient:
